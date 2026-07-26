@@ -64,6 +64,7 @@ $string['googlemeet:removerecording'] = 'Remover as gravações';
 $string['googlemeet:syncgoogledrive'] = 'Sincronizar com o Google Drive';
 $string['googlemeet:view'] = 'Ver Google Meet™ para Moodle';
 $string['hide'] = 'Ocultar';
+$string['invalidactivitycontext'] = 'O item solicitado não pertence a esta atividade Google Meet.';
 $string['invalideventenddate'] = 'Esta data não pode ser anterior à "Data do evento"';
 $string['invalideventendtime'] = 'O horário de término deve ser maior que o horário de início';
 $string['invalidissuerid'] = 'O serviço OAuth selecionado nas configurações do "Google Meet™ para Moodle" não é suportado pelo Google';
