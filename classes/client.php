@@ -346,7 +346,7 @@ class client {
                         "me" in owners and
                         (name contains "'.$meetingcode.'" or name contains "'.$name.'")',
                 'pageSize' => 1000,
-                'fields' => 'files(id,name,permissionIds,createdTime,videoMediaMetadata,webViewLink)'
+                'fields' => 'files(id,name,createdTime,videoMediaMetadata,webViewLink)'
             ];
 
             $recordingresponse = helper::request($service, 'list', $recordingparams, false);
@@ -359,18 +359,6 @@ class client {
 
                     // If the recording has already been processed.
                     if (isset($recording->videoMediaMetadata)) {
-                        if (!in_array('anyoneWithLink', $recording->permissionIds)) {
-                            $permissionparams = [
-                                'fileid' => $recording->id,
-                                'fields' => 'id'
-                            ];
-                            $permissionrawpost = [
-                                "role" => "reader",
-                                "type" => "anyone"
-                            ];
-                            helper::request($service, 'create_permission', $permissionparams, json_encode($permissionrawpost));
-                        }
-
                         // Format it into a human-readable time.
                         $duration = $this->formatseconds((int)$recording->videoMediaMetadata->durationMillis);
 
@@ -381,7 +369,6 @@ class client {
                         $recordings[$i]->createdTime = $createdtime->getTimestamp();
 
                         unset($recordings[$i]->id);
-                        unset($recordings[$i]->permissionIds);
                         unset($recordings[$i]->videoMediaMetadata);
                     } else {
                         $recordings[$i]->unprocessed = true;

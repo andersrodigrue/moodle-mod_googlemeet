@@ -31,7 +31,7 @@ $functions = array(
         'description' => '',
         'type' => 'write',
         'ajax' => true,
-        'capabilities' => 'googlemeet:syncgoogledrive',
+        'capabilities' => 'mod/googlemeet:syncgoogledrive',
     ),
     'mod_googlemeet_recording_edit_name' => array(
         'classname' => 'mod_googlemeet_external',
@@ -39,7 +39,7 @@ $functions = array(
         'description' => '',
         'type' => 'write',
         'ajax' => true,
-        'capabilities' => 'googlemeet:editrecording',
+        'capabilities' => 'mod/googlemeet:editrecording',
     ),
     'mod_googlemeet_showhide_recording' => array(
         'classname' => 'mod_googlemeet_external',
@@ -47,7 +47,7 @@ $functions = array(
         'description' => '',
         'type' => 'write',
         'ajax' => true,
-        'capabilities' => 'googlemeet:editrecording',
+        'capabilities' => 'mod/googlemeet:editrecording',
     ),
     'mod_googlemeet_delete_all_recordings' => array(
         'classname' => 'mod_googlemeet_external',
@@ -55,6 +55,6 @@ $functions = array(
         'description' => '',
         'type' => 'write',
         'ajax' => true,
-        'capabilities' => 'googlemeet:removerecording',
+        'capabilities' => 'mod/googlemeet:removerecording',
     ),
 );
