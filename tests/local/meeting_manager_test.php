@@ -142,8 +142,8 @@ final class meeting_manager_test extends \advanced_testcase {
         $this->assertCount(1, $tasks);
         $task = reset($tasks);
         $this->assertInstanceOf(synchronise_meeting::class, $task);
-        $this->assertSame($owner->id, $task->get_userid());
-        $this->assertSame($meeting->id, (int) $task->get_custom_data()->googlemeetid);
+        $this->assertSame((int) $owner->id, $task->get_userid());
+        $this->assertSame((int) $meeting->id, (int) $task->get_custom_data()->googlemeetid);
     }
 
     /**
