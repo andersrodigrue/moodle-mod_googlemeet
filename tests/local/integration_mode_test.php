@@ -14,19 +14,35 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace mod_googlemeet\local;
+
+use PHPUnit\Framework\Attributes\CoversClass;
+
 /**
- * Plugin version and other meta-data are defined here.
+ * Tests for meeting integration modes.
  *
  * @package     mod_googlemeet
- * @copyright   2020 Rone Santos <ronefel@hotmail.com>
+ * @category    test
+ * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+#[CoversClass(integration_mode::class)]
+final class integration_mode_test extends \basic_testcase {
 
-defined('MOODLE_INTERNAL') || die();
+    /**
+     * Every supported mode is exposed and accepted.
+     */
+    public function test_supported_modes_are_valid(): void {
+        $this->assertSame([
+            integration_mode::MANUAL,
+            integration_mode::LEGACY,
+            integration_mode::MANAGED,
+        ], integration_mode::all());
 
-$plugin->component = 'mod_googlemeet';
-$plugin->release = '3.0.0-dev';
-$plugin->version = 2026072601;
-$plugin->requires = 2026042000; // Moodle 5.2.
-$plugin->supported = [502, 502];
-$plugin->maturity = MATURITY_ALPHA;
+        foreach (integration_mode::all() as $mode) {
+            $this->assertTrue(integration_mode::is_valid($mode));
+        }
+
+        $this->assertFalse(integration_mode::is_valid('automatic'));
+    }
+}

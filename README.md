@@ -15,9 +15,12 @@ To learn how to set up an OAuth 2 service for Google, click [here](https://githu
 </div>
 
 ## Requirements
-Moodle 3.7+
+Moodle 5.2.x
 
-PHP 7.0+
+PHP 8.3 or 8.4
+
+The `3.0.0-dev` development line is an alpha modernization and is not intended for
+production use yet.
 
 ## Installation
 1.  Copy this plugin to the `mod\googlemeet` folder on the server
@@ -25,7 +28,9 @@ PHP 7.0+
 3.  Go to Site Administrator > Notification
 4.  Install the plugin
 
-This module is intended for Moodle 3.7 and above.
+This fork preserves the original GPL history and is being modernized specifically for
+Moodle 5.2. See [the modernization foundation](docs/MODERNIZATION.md) for the current
+migration status and compatibility boundaries.
 
 ## Security
 

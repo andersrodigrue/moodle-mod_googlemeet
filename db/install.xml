@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="mod/googlemeet/db" VERSION="20230414" COMMENT="XMLDB file for Moodle mod_googlemeet"
+<XMLDB PATH="mod/googlemeet/db" VERSION="20260726" COMMENT="XMLDB file for Moodle mod_googlemeet"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -27,13 +27,38 @@
         <FIELD NAME="notify" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Whether to send notification to the student."/>
         <FIELD NAME="minutesbefore" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="When the notification should be send."/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the instance was last modified."/>
-        <FIELD NAME="eventid" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Google Calendar Event ID"/>
+        <FIELD NAME="eventid" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Legacy Calendar link identifier. This is not a Calendar API event ID."/>
+        <FIELD NAME="integrationmode" TYPE="char" LENGTH="16" NOTNULL="true" DEFAULT="manual" SEQUENCE="false" COMMENT="Meeting integration mode: manual, legacy or managed."/>
+        <FIELD NAME="owneruserid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Moodle user who owns the Google authorization."/>
+        <FIELD NAME="oauthissuerid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="OAuth 2 issuer selected for the integration."/>
+        <FIELD NAME="calendarid" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Google Calendar identifier."/>
+        <FIELD NAME="googleeventid" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Opaque Calendar API event identifier."/>
+        <FIELD NAME="googleeventhtmlurl" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Google Calendar event page."/>
+        <FIELD NAME="googleeventetag" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Calendar API event entity tag."/>
+        <FIELD NAME="requestid" TYPE="char" LENGTH="64" NOTNULL="false" SEQUENCE="false" COMMENT="Idempotency identifier for conference creation."/>
+        <FIELD NAME="conferenceid" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Google conference identifier."/>
+        <FIELD NAME="meetingcode" TYPE="char" LENGTH="32" NOTNULL="false" SEQUENCE="false" COMMENT="Normalized Google Meet meeting code."/>
+        <FIELD NAME="meetinguri" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="URI used to join the meeting."/>
+        <FIELD NAME="timestart" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Absolute meeting start timestamp."/>
+        <FIELD NAME="timeend" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Absolute meeting end timestamp."/>
+        <FIELD NAME="timezone" TYPE="char" LENGTH="64" NOTNULL="false" SEQUENCE="false" COMMENT="IANA timezone used for the meeting."/>
+        <FIELD NAME="recurrence" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Normalized recurrence rule."/>
+        <FIELD NAME="sendupdates" TYPE="char" LENGTH="16" NOTNULL="true" DEFAULT="none" SEQUENCE="false" COMMENT="Google Calendar guest notification policy."/>
+        <FIELD NAME="syncstatus" TYPE="char" LENGTH="32" NOTNULL="true" DEFAULT="draft" SEQUENCE="false" COMMENT="Current synchronization state."/>
+        <FIELD NAME="conferencestatus" TYPE="char" LENGTH="32" NOTNULL="false" SEQUENCE="false" COMMENT="Conference creation state returned by Google."/>
+        <FIELD NAME="syncattempts" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Number of synchronization attempts."/>
+        <FIELD NAME="lasterrorcode" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Sanitized code from the last synchronization error."/>
+        <FIELD NAME="lasterrormessage" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Sanitized message from the last synchronization error."/>
+        <FIELD NAME="timelastattempt" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Timestamp of the last synchronization attempt."/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the activity was created."/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
       </KEYS>
       <INDEXES>
         <INDEX NAME="course" UNIQUE="false" FIELDS="course"/>
+        <INDEX NAME="owneruserid" UNIQUE="false" FIELDS="owneruserid"/>
+        <INDEX NAME="syncstatus" UNIQUE="false" FIELDS="syncstatus"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="googlemeet_events" COMMENT="Stores the googlemeet events.">

@@ -14,19 +14,28 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace mod_googlemeet;
+
+use PHPUnit\Framework\Attributes\CoversFunction;
+
 /**
- * Plugin version and other meta-data are defined here.
+ * Tests for activity module callbacks.
  *
  * @package     mod_googlemeet
- * @copyright   2020 Rone Santos <ronefel@hotmail.com>
+ * @category    test
+ * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+#[CoversFunction('googlemeet_supports')]
+final class lib_test extends \basic_testcase {
 
-defined('MOODLE_INTERNAL') || die();
-
-$plugin->component = 'mod_googlemeet';
-$plugin->release = '3.0.0-dev';
-$plugin->version = 2026072601;
-$plugin->requires = 2026042000; // Moodle 5.2.
-$plugin->supported = [502, 502];
-$plugin->maturity = MATURITY_ALPHA;
+    /**
+     * Google Meet is presented as a communication activity in Moodle 5.2.
+     */
+    public function test_activity_purpose_is_communication(): void {
+        $this->assertSame(
+            MOD_PURPOSE_COMMUNICATION,
+            googlemeet_supports(FEATURE_MOD_PURPOSE)
+        );
+    }
+}

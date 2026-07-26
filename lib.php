@@ -23,6 +23,8 @@
  */
 
 use mod_googlemeet\client;
+use mod_googlemeet\local\integration_mode;
+use mod_googlemeet\local\sync_state;
 
 /**
  * Return if the plugin supports $feature.
@@ -40,6 +42,8 @@ function googlemeet_supports($feature) {
             return false;
         case FEATURE_MOD_INTRO:
             return true;
+        case FEATURE_MOD_PURPOSE:
+            return MOD_PURPOSE_COMMUNICATION;
         case FEATURE_COMPLETION_TRACKS_VIEWS:
             return true;
         case FEATURE_GRADE_HAS_GRADE:
@@ -78,6 +82,8 @@ function googlemeet_add_instance($googlemeet, $mform = null) {
         if ($url) {
             $googlemeet->url = $url;
         }
+        $googlemeet->integrationmode = integration_mode::MANUAL;
+        $googlemeet->syncstatus = sync_state::READY;
     } else {
         $calendarevent = $client->create_meeting_event($googlemeet);
         $googlemeet->url = $calendarevent->hangoutLink;
@@ -86,13 +92,17 @@ function googlemeet_add_instance($googlemeet, $mform = null) {
         $googlemeet->eventid = $link->get_param('eid');
         $googlemeet->originalname = $calendarevent->summary;
         $googlemeet->creatoremail = $calendarevent->creator->email;
+        $googlemeet->integrationmode = integration_mode::LEGACY;
+        $googlemeet->syncstatus = sync_state::DISCONNECTED;
     }
 
     if (isset($googlemeet->days)) {
         $googlemeet->days = json_encode($googlemeet->days);
     }
 
-    $googlemeet->timemodified = time();
+    $googlemeet->meetinguri = $googlemeet->url;
+    $googlemeet->timecreated = time();
+    $googlemeet->timemodified = $googlemeet->timecreated;
 
     if (!$googlemeet->id = $DB->insert_record('googlemeet', $googlemeet)) {
         return false;
@@ -140,6 +150,7 @@ function googlemeet_update_instance($googlemeet, $mform = null) {
         $url = googlemeet_clear_url($googlemeet->url);
         if ($url) {
             $googlemeet->url = $url;
+            $googlemeet->meetinguri = $url;
         }
     }
 

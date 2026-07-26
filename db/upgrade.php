@@ -29,7 +29,7 @@
  * @param int $oldversion
  * @return bool
  */
-function xmldb_googlemeet_upgrade($oldversion) {
+function xmldb_googlemeet_upgrade($oldversion): bool {
     global $DB;
 
     $dbman = $DB->get_manager();
@@ -47,6 +47,122 @@ function xmldb_googlemeet_upgrade($oldversion) {
 
         // Googlemeet savepoint reached.
         upgrade_mod_savepoint(true, 2023042200, 'googlemeet');
+    }
+
+    if ($oldversion < 2026072601) {
+        $table = new xmldb_table('googlemeet');
+        $fields = [
+            new xmldb_field(
+                'integrationmode',
+                XMLDB_TYPE_CHAR,
+                '16',
+                null,
+                XMLDB_NOTNULL,
+                null,
+                'manual',
+                'eventid'
+            ),
+            new xmldb_field('owneruserid', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'integrationmode'),
+            new xmldb_field('oauthissuerid', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'owneruserid'),
+            new xmldb_field('calendarid', XMLDB_TYPE_CHAR, '255', null, null, null, null, 'oauthissuerid'),
+            new xmldb_field('googleeventid', XMLDB_TYPE_CHAR, '255', null, null, null, null, 'calendarid'),
+            new xmldb_field('googleeventhtmlurl', XMLDB_TYPE_TEXT, null, null, null, null, null, 'googleeventid'),
+            new xmldb_field('googleeventetag', XMLDB_TYPE_CHAR, '255', null, null, null, null, 'googleeventhtmlurl'),
+            new xmldb_field('requestid', XMLDB_TYPE_CHAR, '64', null, null, null, null, 'googleeventetag'),
+            new xmldb_field('conferenceid', XMLDB_TYPE_CHAR, '255', null, null, null, null, 'requestid'),
+            new xmldb_field('meetingcode', XMLDB_TYPE_CHAR, '32', null, null, null, null, 'conferenceid'),
+            new xmldb_field('meetinguri', XMLDB_TYPE_TEXT, null, null, null, null, null, 'meetingcode'),
+            new xmldb_field('timestart', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'meetinguri'),
+            new xmldb_field('timeend', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'timestart'),
+            new xmldb_field('timezone', XMLDB_TYPE_CHAR, '64', null, null, null, null, 'timeend'),
+            new xmldb_field('recurrence', XMLDB_TYPE_TEXT, null, null, null, null, null, 'timezone'),
+            new xmldb_field(
+                'sendupdates',
+                XMLDB_TYPE_CHAR,
+                '16',
+                null,
+                XMLDB_NOTNULL,
+                null,
+                'none',
+                'recurrence'
+            ),
+            new xmldb_field(
+                'syncstatus',
+                XMLDB_TYPE_CHAR,
+                '32',
+                null,
+                XMLDB_NOTNULL,
+                null,
+                'draft',
+                'sendupdates'
+            ),
+            new xmldb_field('conferencestatus', XMLDB_TYPE_CHAR, '32', null, null, null, null, 'syncstatus'),
+            new xmldb_field(
+                'syncattempts',
+                XMLDB_TYPE_INTEGER,
+                '10',
+                null,
+                XMLDB_NOTNULL,
+                null,
+                '0',
+                'conferencestatus'
+            ),
+            new xmldb_field('lasterrorcode', XMLDB_TYPE_CHAR, '100', null, null, null, null, 'syncattempts'),
+            new xmldb_field('lasterrormessage', XMLDB_TYPE_TEXT, null, null, null, null, null, 'lasterrorcode'),
+            new xmldb_field('timelastattempt', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'lasterrormessage'),
+            new xmldb_field(
+                'timecreated',
+                XMLDB_TYPE_INTEGER,
+                '10',
+                null,
+                XMLDB_NOTNULL,
+                null,
+                '0',
+                'timelastattempt'
+            ),
+        ];
+
+        foreach ($fields as $field) {
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+
+        // Preserve the existing link, but do not treat the legacy eventid as a Calendar API event ID.
+        $DB->execute(
+            'UPDATE {googlemeet}
+                SET meetinguri = url
+              WHERE meetinguri IS NULL'
+        );
+        $DB->execute(
+            'UPDATE {googlemeet}
+                SET timecreated = timemodified
+              WHERE timecreated = :zero',
+            ['zero' => 0]
+        );
+
+        // Manual links are already usable without remote synchronization.
+        $DB->set_field('googlemeet', 'integrationmode', 'manual');
+        $DB->set_field('googlemeet', 'syncstatus', 'ready');
+
+        // Legacy-linked meetings need an explicit reconnect before the modern client can manage them.
+        $legacyselect = 'eventid IS NOT NULL AND eventid <> :emptyeventid';
+        $legacyparams = ['emptyeventid' => ''];
+        $DB->set_field_select('googlemeet', 'integrationmode', 'legacy', $legacyselect, $legacyparams);
+        $DB->set_field_select('googlemeet', 'syncstatus', 'disconnected', $legacyselect, $legacyparams);
+
+        $indexes = [
+            new xmldb_index('owneruserid', XMLDB_INDEX_NOTUNIQUE, ['owneruserid']),
+            new xmldb_index('syncstatus', XMLDB_INDEX_NOTUNIQUE, ['syncstatus']),
+        ];
+
+        foreach ($indexes as $index) {
+            if (!$dbman->index_exists($table, $index)) {
+                $dbman->add_index($table, $index);
+            }
+        }
+
+        upgrade_mod_savepoint(true, 2026072601, 'googlemeet');
     }
 
     return true;
