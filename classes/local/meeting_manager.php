@@ -17,6 +17,8 @@
 namespace mod_googlemeet\local;
 
 use mod_googlemeet\api\calendar_adapter;
+use mod_googlemeet\api\calendar_api_exception;
+use mod_googlemeet\api\calendar_authorization_exception;
 use mod_googlemeet\api\calendar_configuration_exception;
 use mod_googlemeet\api\calendar_event_result;
 use mod_googlemeet\api\calendar_response_exception;
@@ -26,8 +28,8 @@ use mod_googlemeet\task\synchronise_meeting;
  * Queues and coordinates local meeting synchronization work.
  *
  * Manual meetings settle locally and legacy meetings remain disconnected. A
- * managed Calendar adapter can be injected without coupling this coordinator to
- * OAuth or a particular Google SDK.
+ * managed Calendar adapter can be injected or created through the production
+ * provider without coupling this coordinator to OAuth or a particular Google SDK.
  *
  * @package     mod_googlemeet
  * @copyright   2026 Anderson Rodrigues
@@ -50,6 +52,9 @@ final class meeting_manager {
     /** Stable error code for an inconsistent Calendar response. */
     private const ERROR_CALENDAR_RESPONSE = 'calendar_response_invalid';
 
+    /** Stable error code for authorization requiring user action. */
+    private const ERROR_AUTHORIZATION_REQUIRED = 'authorization_required';
+
     /** @var sync_repository Synchronization repository. */
     private sync_repository $repository;
 
@@ -59,19 +64,25 @@ final class meeting_manager {
     /** @var calendar_adapter|null Managed Calendar adapter. */
     private ?calendar_adapter $calendaradapter;
 
+    /** @var calendar_adapter_provider|null Production adapter provider. */
+    private ?calendar_adapter_provider $calendaradapterprovider;
+
     /**
      * @param sync_repository|null $repository Synchronization repository.
      * @param meeting_lock|null $lock Per-activity lock coordinator.
      * @param calendar_adapter|null $calendaradapter Managed Calendar adapter.
+     * @param calendar_adapter_provider|null $calendaradapterprovider Production adapter provider.
      */
     public function __construct(
         ?sync_repository $repository = null,
         ?meeting_lock $lock = null,
-        ?calendar_adapter $calendaradapter = null
+        ?calendar_adapter $calendaradapter = null,
+        ?calendar_adapter_provider $calendaradapterprovider = null
     ) {
         $this->repository = $repository ?? new sync_repository();
         $this->lock = $lock ?? new meeting_lock();
         $this->calendaradapter = $calendaradapter;
+        $this->calendaradapterprovider = $calendaradapterprovider;
     }
 
     /**
@@ -177,7 +188,7 @@ final class meeting_manager {
      * @param \stdClass $meeting Activity record in the syncing state.
      */
     private function process_managed(\stdClass $meeting): void {
-        if ($this->calendaradapter === null) {
+        if ($this->calendaradapter === null && $this->calendaradapterprovider === null) {
             $this->repository->mark_failed(
                 (int) $meeting->id,
                 self::ERROR_ADAPTER_UNAVAILABLE,
@@ -188,7 +199,25 @@ final class meeting_manager {
         }
 
         try {
-            $result = $this->calendaradapter->synchronise($meeting);
+            $adapter = $this->calendaradapter
+                ?? $this->calendaradapterprovider->create($meeting);
+            $result = $adapter->synchronise($meeting);
+        } catch (calendar_authorization_exception $e) {
+            $this->repository->mark_disconnected(
+                (int) $meeting->id,
+                self::ERROR_AUTHORIZATION_REQUIRED,
+                get_string('syncoauthrequired', 'mod_googlemeet')
+            );
+            mtrace(get_string('syncmanageddisconnected', 'mod_googlemeet', $meeting->id));
+            return;
+        } catch (calendar_api_exception $e) {
+            $this->repository->mark_failed(
+                (int) $meeting->id,
+                $e->error_code(),
+                get_string('synccalendarapifailed', 'mod_googlemeet')
+            );
+            mtrace(get_string('syncmanagedapifailed', 'mod_googlemeet', $meeting->id));
+            return;
         } catch (calendar_configuration_exception $e) {
             $this->repository->mark_failed(
                 (int) $meeting->id,

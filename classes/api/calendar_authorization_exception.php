@@ -14,33 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace mod_googlemeet\api;
+
 /**
- * Definition of Google Meet task.
+ * The meeting owner must authorize Google Calendar again.
  *
  * @package     mod_googlemeet
- * @copyright   2020 Rone Santos <ronefel@hotmail.com>
+ * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-$tasks = [
-    [
-        'classname' => 'mod_googlemeet\task\notify_event',
-        'blocking' => 0,
-        'minute' => '*/5',
-        'hour' => '*',
-        'day' => '*',
-        'dayofweek' => '*',
-        'month' => '*',
-    ],
-    [
-        'classname' => 'mod_googlemeet\task\reconcile_pending_meetings',
-        'blocking' => 0,
-        'minute' => '*/5',
-        'hour' => '*',
-        'day' => '*',
-        'dayofweek' => '*',
-        'month' => '*',
-    ],
-];
+final class calendar_authorization_exception extends \runtime_exception {
+}

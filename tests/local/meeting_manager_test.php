@@ -17,6 +17,8 @@
 namespace mod_googlemeet\local;
 
 use mod_googlemeet\api\calendar_adapter;
+use mod_googlemeet\api\calendar_api_exception;
+use mod_googlemeet\api\calendar_authorization_exception;
 use mod_googlemeet\api\calendar_client;
 use mod_googlemeet\api\calendar_event_result;
 use mod_googlemeet\api\calendar_identity;
@@ -100,6 +102,35 @@ final class meeting_manager_calendar_client implements calendar_client {
 }
 
 /**
+ * Adapter provider that exposes composition failures to manager tests.
+ *
+ * @package     mod_googlemeet
+ * @category    test
+ * @copyright   2026 Anderson Rodrigues
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+final class meeting_manager_failing_provider implements calendar_adapter_provider {
+
+    /** @var \RuntimeException Exception thrown during production composition. */
+    private \RuntimeException $exception;
+
+    /**
+     * @param \RuntimeException $exception Exception to throw.
+     */
+    public function __construct(\RuntimeException $exception) {
+        $this->exception = $exception;
+    }
+
+    /**
+     * @param \stdClass $meeting Managed activity record.
+     * @return calendar_adapter
+     */
+    public function create(\stdClass $meeting): calendar_adapter {
+        throw $this->exception;
+    }
+}
+
+/**
  * Tests for the local synchronization coordinator.
  *
  * @package     mod_googlemeet
@@ -174,6 +205,59 @@ final class meeting_manager_test extends \advanced_testcase {
         $this->assertSame(sync_state::FAILED, $updated->syncstatus);
         $this->assertSame('adapter_unavailable', $updated->lasterrorcode);
         $this->assertSame(1, (int) $updated->syncattempts);
+    }
+
+    /**
+     * Missing or revoked OAuth authorization moves the meeting to disconnected.
+     */
+    public function test_managed_authorization_failure_requires_reconnect(): void {
+        $this->resetAfterTest();
+
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'syncstatus' => sync_state::QUEUED,
+        ]);
+        $provider = new meeting_manager_failing_provider(
+            new calendar_authorization_exception('Sensitive OAuth detail')
+        );
+
+        $this->expectOutputString(
+            get_string('syncmanageddisconnected', 'mod_googlemeet', $meeting->id) . "\n"
+        );
+        (new meeting_manager(
+            calendaradapterprovider: $provider
+        ))->process($meeting->id);
+        $updated = (new sync_repository())->get($meeting->id);
+
+        $this->assertSame(sync_state::DISCONNECTED, $updated->syncstatus);
+        $this->assertSame('authorization_required', $updated->lasterrorcode);
+        $this->assertStringNotContainsString('Sensitive OAuth detail', $updated->lasterrormessage);
+    }
+
+    /**
+     * A permanent Calendar rejection stores only the stable classified code.
+     */
+    public function test_managed_api_failure_is_safely_recorded(): void {
+        $this->resetAfterTest();
+
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'syncstatus' => sync_state::QUEUED,
+        ]);
+        $provider = new meeting_manager_failing_provider(
+            new calendar_api_exception('calendar_permission_denied')
+        );
+
+        $this->expectOutputString(
+            get_string('syncmanagedapifailed', 'mod_googlemeet', $meeting->id) . "\n"
+        );
+        (new meeting_manager(
+            calendaradapterprovider: $provider
+        ))->process($meeting->id);
+        $updated = (new sync_repository())->get($meeting->id);
+
+        $this->assertSame(sync_state::FAILED, $updated->syncstatus);
+        $this->assertSame('calendar_permission_denied', $updated->lasterrorcode);
     }
 
     /**

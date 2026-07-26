@@ -99,15 +99,48 @@ The third structural slice adds an isolated managed Calendar adapter:
 - configuration and response failures are persisted with stable, non-secret error
   codes.
 
-The adapter is available to `meeting_manager` through dependency injection. There is
-deliberately no concrete OAuth/HTTP implementation yet, so normal production
-execution continues to fail safely with `adapter_unavailable` and performs no Google
-request. This lets the request and reconciliation rules be tested independently of
-credentials and network behavior.
+The adapter remains available to `meeting_manager` through dependency injection, so
+its request and reconciliation rules can be tested independently of credentials and
+network behavior.
+
+## OAuth transport and pending reconciliation
+
+The fourth structural slice provides the first production composition:
+
+- `oauth_manager` loads the issuer stored on the activity and refuses to use a token
+  unless the ad hoc task is running as the stored meeting owner;
+- the issuer authorization endpoint must be HTTPS on `accounts.google.com`;
+- the managed integration requests only
+  `https://www.googleapis.com/auth/calendar.events`; Drive access is not added;
+- Moodle's user OAuth client is created with automatic refresh enabled, so access
+  and refresh tokens remain in Moodle core's storage rather than plugin tables;
+- explicit plugin disconnect delegates to Moodle core's scoped `log_out()` lifecycle;
+- the plugin does not silently call Google's project-wide revocation endpoint,
+  because that operation invalidates all scopes granted to the OAuth project and
+  could also disrupt Google login or another integration using the same issuer;
+- `moodle_oauth_http_client` checks authorization before each request and restricts
+  bearer-token requests to `https://www.googleapis.com`;
+- `google_calendar_client` percent-encodes path values, whitelists query
+  parameters and decodes the complete Calendar error response;
+- invalid or insufficient authorization moves the meeting to `disconnected`;
+- permanent API rejections store only stable local codes, never Google's remote
+  message;
+- rate limits, precondition failures and 5xx responses remain exceptions so
+  Moodle's ad hoc retry policy can apply backoff;
+- an insert conflict remains the idempotent signal used to read the controlled
+  event;
+- `reconcile_pending_meetings` runs every five minutes and only queues owner-scoped
+  ad hoc tasks; cron never reads or uses a teacher's OAuth token itself;
+- pending conferences older than five minutes and `syncing` records stale for
+  thirty minutes are reconciled in bounded batches of 100.
+
+The production task now composes this OAuth-aware client for records already in
+`managed` mode. Existing `manual` and `legacy` records do not begin making Google
+requests as a side effect of upgrade.
 
 ## Next structural slice
 
-The next slice will implement the OAuth-aware `calendar_client`, token refresh and
-revocation behavior, safe translation of Google API errors, pending reconciliation
-scheduling, and the first production composition point. Only after that boundary is
-covered will activity create/update flows queue managed synchronization.
+The next slice will replace the legacy create/update form flow with explicit
+per-teacher authorization and managed queueing. It must normalize the existing form
+dates and recurrence into `timestart`, `timeend`, `timezone` and `recurrence`, expose
+the synchronization state in Boost, and retain a deliberate manual-link option.

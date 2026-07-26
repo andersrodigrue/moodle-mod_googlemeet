@@ -93,6 +93,66 @@ final class sync_repository {
     }
 
     /**
+     * Returns owner-scoped meetings whose remote state should be checked again.
+     *
+     * Pending conferences are polled after a short delay. A stale syncing state
+     * is also recovered if all retries of the original ad hoc task were lost.
+     *
+     * @param int $pendingbefore Latest last-attempt time accepted for pending meetings.
+     * @param int $syncingbefore Latest last-attempt time accepted for stale syncing meetings.
+     * @param int $limit Maximum number of records.
+     * @return \stdClass[]
+     */
+    public function get_reconciliation_candidates(
+        int $pendingbefore,
+        int $syncingbefore,
+        int $limit = 100
+    ): array {
+        global $DB;
+
+        if ($pendingbefore < 0 || $syncingbefore < 0) {
+            throw new \coding_exception('Reconciliation timestamps cannot be negative.');
+        }
+        if ($limit < 1 || $limit > 500) {
+            throw new \coding_exception('The reconciliation batch limit must be between 1 and 500.');
+        }
+
+        $select = 'gm.owneruserid IS NOT NULL
+                    AND gm.owneruserid > :zero
+                    AND u.deleted = :notdeleted
+                    AND (
+                        (
+                            gm.syncstatus = :pending
+                            AND (gm.timelastattempt IS NULL OR gm.timelastattempt <= :pendingbefore)
+                        )
+                        OR (
+                            gm.syncstatus = :syncing
+                            AND gm.timelastattempt IS NOT NULL
+                            AND gm.timelastattempt <= :syncingbefore
+                        )
+                    )';
+        $records = $DB->get_records_sql(
+            'SELECT gm.id, gm.owneruserid, gm.syncstatus, gm.timelastattempt
+               FROM {' . self::TABLE . '} gm
+               JOIN {user} u ON u.id = gm.owneruserid
+              WHERE ' . $select . '
+           ORDER BY gm.timelastattempt ASC, gm.id ASC',
+            [
+                'zero' => 0,
+                'notdeleted' => 0,
+                'pending' => sync_state::PENDING,
+                'pendingbefore' => $pendingbefore,
+                'syncing' => sync_state::SYNCING,
+                'syncingbefore' => $syncingbefore,
+            ],
+            0,
+            $limit
+        );
+
+        return array_values($records);
+    }
+
+    /**
      * Applies a validated synchronization transition.
      *
      * @param int $googlemeetid Activity instance ID.

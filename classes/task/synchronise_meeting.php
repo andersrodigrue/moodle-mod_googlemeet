@@ -16,6 +16,7 @@
 
 namespace mod_googlemeet\task;
 
+use mod_googlemeet\local\calendar_adapter_factory;
 use mod_googlemeet\local\meeting_manager;
 
 /**
@@ -85,6 +86,9 @@ final class synchronise_meeting extends \core\task\adhoc_task {
             throw new \coding_exception('The Google Meet synchronization task has invalid custom data.');
         }
 
-        (new meeting_manager())->process((int) $data->googlemeetid);
+        $manager = new meeting_manager(
+            calendaradapterprovider: new calendar_adapter_factory()
+        );
+        $manager->process((int) $data->googlemeetid);
     }
 }

@@ -67,6 +67,35 @@ final class synchronise_meeting_test extends \advanced_testcase {
     }
 
     /**
+     * Production composition disconnects a managed meeting without valid OAuth.
+     */
+    public function test_execute_uses_production_calendar_composition(): void {
+        $this->resetAfterTest();
+
+        $owner = $this->getDataGenerator()->create_user();
+        $this->setUser($owner);
+        $course = $this->getDataGenerator()->create_course();
+        $generator = $this->getDataGenerator()->get_plugin_generator('mod_googlemeet');
+        $meeting = $generator->create_instance([
+            'course' => $course->id,
+            'integrationmode' => integration_mode::MANAGED,
+            'owneruserid' => $owner->id,
+            'oauthissuerid' => 999999,
+            'calendarid' => 'primary',
+            'syncstatus' => sync_state::QUEUED,
+        ]);
+
+        $this->expectOutputString(
+            get_string('syncmanageddisconnected', 'mod_googlemeet', $meeting->id) . "\n"
+        );
+        synchronise_meeting::create((int) $meeting->id, (int) $owner->id)->execute();
+        $updated = (new sync_repository())->get((int) $meeting->id);
+
+        $this->assertSame(sync_state::DISCONNECTED, $updated->syncstatus);
+        $this->assertSame('authorization_required', $updated->lasterrorcode);
+    }
+
+    /**
      * A task for a deleted activity completes without retrying forever.
      */
     public function test_execute_ignores_missing_meeting(): void {

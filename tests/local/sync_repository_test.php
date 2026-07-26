@@ -121,6 +121,71 @@ final class sync_repository_test extends \advanced_testcase {
     }
 
     /**
+     * Only old owner-scoped pending and syncing meetings are reconciled.
+     */
+    public function test_get_reconciliation_candidates_filters_state_age_and_owner(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $owner = $this->getDataGenerator()->create_user();
+        $now = time();
+        $oldpending = $this->create_meeting([
+            'owneruserid' => $owner->id,
+            'syncstatus' => sync_state::PENDING,
+            'timelastattempt' => $now - 600,
+        ]);
+        $oldsyncing = $this->create_meeting([
+            'owneruserid' => $owner->id,
+            'syncstatus' => sync_state::SYNCING,
+            'timelastattempt' => $now - 3600,
+        ]);
+        $recentpending = $this->create_meeting([
+            'owneruserid' => $owner->id,
+            'syncstatus' => sync_state::PENDING,
+            'timelastattempt' => $now,
+        ]);
+        $noowner = $this->create_meeting([
+            'syncstatus' => sync_state::PENDING,
+            'timelastattempt' => $now - 600,
+        ]);
+        $deletedowner = $this->getDataGenerator()->create_user();
+        $deletedownermeeting = $this->create_meeting([
+            'owneruserid' => $deletedowner->id,
+            'syncstatus' => sync_state::PENDING,
+            'timelastattempt' => $now - 600,
+        ]);
+        $DB->set_field('user', 'deleted', 1, ['id' => $deletedowner->id]);
+        $ready = $this->create_meeting([
+            'owneruserid' => $owner->id,
+            'syncstatus' => sync_state::READY,
+            'timelastattempt' => $now - 3600,
+        ]);
+
+        $candidates = (new sync_repository())->get_reconciliation_candidates(
+            $now - 300,
+            $now - 1800
+        );
+
+        $this->assertEqualsCanonicalizing(
+            [$oldpending->id, $oldsyncing->id],
+            array_map(static fn(\stdClass $meeting): int => (int) $meeting->id, $candidates)
+        );
+        $this->assertNotContains($recentpending->id, array_column($candidates, 'id'));
+        $this->assertNotContains($noowner->id, array_column($candidates, 'id'));
+        $this->assertNotContains($deletedownermeeting->id, array_column($candidates, 'id'));
+        $this->assertNotContains($ready->id, array_column($candidates, 'id'));
+        $this->assertTrue($DB->record_exists('googlemeet', ['id' => $ready->id]));
+    }
+
+    /**
+     * Reconciliation batches are explicitly bounded.
+     */
+    public function test_reconciliation_candidates_validate_batch_limit(): void {
+        $this->expectException(\coding_exception::class);
+        (new sync_repository())->get_reconciliation_candidates(time(), time(), 501);
+    }
+
+    /**
      * Creates an activity without calling Google.
      *
      * @param array<string, mixed> $fields Activity fields.

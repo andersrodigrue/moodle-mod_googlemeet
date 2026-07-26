@@ -19,9 +19,9 @@ namespace mod_googlemeet\api;
 /**
  * Transport boundary for the Google Calendar Events API.
  *
- * A future OAuth-aware implementation will translate Google responses to arrays
- * and remote transport failures to exceptions. Keeping this contract free of a
- * particular Google SDK makes the synchronization adapter deterministic in tests.
+ * The production implementation translates Google responses to arrays and remote
+ * failures to classified exceptions. Keeping this contract free of a particular
+ * Google SDK makes the synchronization adapter deterministic in tests.
  *
  * @package     mod_googlemeet
  * @copyright   2026 Anderson Rodrigues
