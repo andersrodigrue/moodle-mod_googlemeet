@@ -50,6 +50,7 @@ class mod_googlemeet_generator extends testing_module_generator {
 
         $this->instancecount++;
         $record = (array) $record;
+        $now = time();
 
         if (empty($record['course'])) {
             throw new coding_exception('The Google Meet generator requires a course.');
@@ -71,7 +72,17 @@ class mod_googlemeet_generator extends testing_module_generator {
             'addmultiply' => 0,
             'notify' => 0,
             'minutesbefore' => 0,
-            'timemodified' => time(),
+            'timemodified' => $now,
+        ];
+        $record += [
+            'integrationmode' => \mod_googlemeet\local\integration_mode::MANUAL,
+            'meetinguri' => $record['url'],
+            'timestart' => (int) $record['eventdate'],
+            'timeend' => (int) $record['eventdate'] + HOURSECS,
+            'sendupdates' => 'none',
+            'syncstatus' => \mod_googlemeet\local\sync_state::READY,
+            'syncattempts' => 0,
+            'timecreated' => $now,
         ];
 
         $record = (object) $record;

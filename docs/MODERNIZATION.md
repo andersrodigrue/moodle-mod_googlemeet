@@ -51,8 +51,30 @@ The upgrade from `2.1.2` is conservative:
 - no remote Google request and no permission change is made during the upgrade;
 - the new `googleeventid` remains empty until a future explicit reconciliation.
 
+## Synchronization boundary
+
+The second structural slice adds:
+
+- `sync_repository`, which validates transitions and restricts synchronization
+  fields before persistence;
+- one Moodle Lock API resource per activity, using the
+  `mod_googlemeet_meeting_sync` namespace;
+- `meeting_manager`, which queues and processes local state under that lock;
+- the `synchronise_meeting` ad hoc task, with only the activity ID in custom data;
+- duplicate task suppression through Moodle's task manager;
+- owner-scoped task execution when `owneruserid` is available;
+- bounded, sanitized synchronization error storage.
+
+The task is intentionally not listed in `db/tasks.php`: ad hoc tasks are queued
+programmatically and are not scheduled tasks.
+
+This slice still performs no Google API calls. Manual links settle as `ready`, legacy
+meetings return to `disconnected`, and managed meetings fail safely with
+`adapter_unavailable` until the Calendar adapter is implemented. No form or legacy
+client queues this task yet.
+
 ## Next structural slice
 
-The next slice will add the synchronization repository, Lock API coordination and an
-ad hoc task boundary. Google Calendar calls will only move behind that boundary after
-the local transition rules and locking behavior are covered by tests.
+The next slice will add the managed Google Calendar adapter behind
+`meeting_manager`, including deterministic event identity, conference request
+idempotency and explicit handling of `pending`, `success` and failure outcomes.

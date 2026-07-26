@@ -135,6 +135,16 @@ $string['strftimedm'] = '%a. %d %b.';
 $string['strftimedmy'] = '%a. %d %b. %Y';
 $string['strftimedmyhm'] = '%a. %d %b. %Y %H:%M';
 $string['strftimehm'] = '%H:%M';
+$string['syncactivitymissing'] = 'Google Meet activity {$a} no longer exists; synchronization was skipped.';
+$string['syncadapterunavailable'] = 'The managed Google Calendar synchronization adapter is not available yet.';
+$string['syncinvalidintegrationmode'] = 'The stored Google Meet integration mode is invalid.';
+$string['synclegacydisconnected'] = 'Google Meet activity {$a} requires Google reconnection.';
+$string['synclocktimeout'] = 'Could not acquire the synchronization lock for Google Meet activity {$a}.';
+$string['syncmanageddeferred'] = 'Google Meet activity {$a} is waiting for the managed Google Calendar adapter.';
+$string['syncmanualready'] = 'Google Meet activity {$a} uses a manual link and is ready.';
+$string['syncreconnectrequired'] = 'The meeting owner must reconnect Google before synchronization can continue.';
+$string['syncstateskipped'] = 'Google Meet activity {$a->id} is in state {$a->state}; synchronization was skipped.';
+$string['synchronisetask'] = 'Synchronize Google Meet activity';
 $string['syncwithgoogledrive'] = 'Sync with Google Drive';
 $string['sync_info'] = 'Wait at least 10 minutes for the recording file to be generated and saved in "My Drive > Meet Recordings" of the organizer.
 <p></p>

@@ -135,6 +135,16 @@ $string['strftimedm'] = '%a. %d %b.';
 $string['strftimedmy'] = '%a. %d %b. %Y';
 $string['strftimedmyhm'] = '%a. %d %b. %Y %H:%M';
 $string['strftimehm'] = '%H:%M';
+$string['syncactivitymissing'] = 'A atividade Google Meet {$a} não existe mais; a sincronização foi ignorada.';
+$string['syncadapterunavailable'] = 'O adaptador de sincronização gerenciada com o Google Agenda ainda não está disponível.';
+$string['syncinvalidintegrationmode'] = 'O modo de integração armazenado para o Google Meet é inválido.';
+$string['synclegacydisconnected'] = 'A atividade Google Meet {$a} exige uma nova autorização do Google.';
+$string['synclocktimeout'] = 'Não foi possível obter o bloqueio de sincronização da atividade Google Meet {$a}.';
+$string['syncmanageddeferred'] = 'A atividade Google Meet {$a} aguarda o adaptador gerenciado do Google Agenda.';
+$string['syncmanualready'] = 'A atividade Google Meet {$a} usa um link manual e está pronta.';
+$string['syncreconnectrequired'] = 'O proprietário da reunião precisa reconectar o Google antes de continuar.';
+$string['syncstateskipped'] = 'A atividade Google Meet {$a->id} está no estado {$a->state}; a sincronização foi ignorada.';
+$string['synchronisetask'] = 'Sincronizar atividade do Google Meet';
 $string['syncwithgoogledrive'] = 'Sincronizar com o Google Drive';
 $string['sync_info'] = 'Aguarde ao menos 10 minutos para que o arquivo da gravação seja gerado e salvo em "Meu Drive > Meet Recordings" do organizador.
 <p></p>
