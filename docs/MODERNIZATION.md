@@ -176,10 +176,35 @@ The fifth structural slice connects teacher actions to the managed boundary:
 Legacy activities remain classified as `legacy` until a teacher edits and explicitly
 chooses managed Calendar ownership or confirms the preserved link as manual.
 
+## Idempotent cancellation and owner commands
+
+The sixth structural slice completes the managed event cancellation boundary:
+
+- the Calendar transport now supports `DELETE` with the stored event ID and the
+  configured `sendUpdates` policy;
+- successful empty responses and already absent events (`404` or `410`) settle as
+  the same idempotent cancellation result;
+- cancellation is queued in the meeting owner's OAuth context and retains the
+  remote event ID as an audit and retry boundary;
+- the local Meet URI and legacy URL are cleared only after remote cancellation has
+  been reconciled;
+- transient transport failures remain retryable by Moodle's ad hoc task runner;
+- permanent or authorization failures retain the `cancelling` intent, preventing a
+  reconnect or retry from accidentally recreating the event;
+- retry, reconnect and cancel commands use owner-only POST forms protected by
+  Moodle `sesskey` validation and a dedicated capability;
+- reconnect resumes the interrupted operation: synchronization for a disconnected
+  meeting, or deletion for a cancellation blocked by authorization;
+- students and non-owners receive no command URLs or session keys in the rendered
+  status model.
+
+Deleting the Moodle activity still removes local data only. Remote cancellation is
+an explicit teacher command so ordinary course cleanup cannot silently delete an
+external Calendar event.
+
 ## Next structural slice
 
-The next slice should complete remote deletion/cancellation, add an owner-only
-reconnect/retry action using POST plus `sesskey`, and migrate remaining legacy Drive
-recording flows away from the broad combined OAuth client. It should also implement
-the Moodle 5.2 activity overview integration and extend backup/restore tests for the
-new managed lifecycle.
+The next slice should implement the Moodle 5.2 activity overview integration and
+extend backup/restore tests for the managed lifecycle. The remaining legacy Drive
+recording flows should then move away from the broad combined OAuth client without
+silently adding Drive scopes to the managed Calendar authorization.

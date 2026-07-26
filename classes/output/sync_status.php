@@ -33,13 +33,28 @@ final class sync_status implements \renderable, \templatable {
     /** @var bool Whether administrator-facing diagnostic details may be shown. */
     private bool $showdetails;
 
+    /** @var int Course module ID used by secure action forms. */
+    private int $cmid;
+
+    /** @var bool Whether owner-scoped management actions may be shown. */
+    private bool $showactions;
+
     /**
      * @param \stdClass $meeting Activity record.
      * @param bool $showdetails Whether to include sanitized diagnostic details.
+     * @param int $cmid Course module ID used by secure action forms.
+     * @param bool $showactions Whether owner-scoped management actions may be shown.
      */
-    public function __construct(\stdClass $meeting, bool $showdetails = false) {
+    public function __construct(
+        \stdClass $meeting,
+        bool $showdetails = false,
+        int $cmid = 0,
+        bool $showactions = false
+    ) {
         $this->meeting = $meeting;
         $this->showdetails = $showdetails;
+        $this->cmid = $cmid;
+        $this->showactions = $showactions;
     }
 
     /**
@@ -60,7 +75,7 @@ final class sync_status implements \renderable, \templatable {
             sync_state::SYNCING,
             sync_state::PENDING,
             sync_state::CANCELLING,
-        ], true);
+        ], true) && empty($this->meeting->lasterrorcode);
         $badgeclass = match ($state) {
             sync_state::READY => 'text-bg-success',
             sync_state::FAILED, sync_state::DISCONNECTED => 'text-bg-danger',
@@ -87,6 +102,33 @@ final class sync_status implements \renderable, \templatable {
             $data['haserror'] = true;
             $data['errorcode'] = (string) $this->meeting->lasterrorcode;
             $data['errormessage'] = (string) ($this->meeting->lasterrormessage ?? '');
+        }
+
+        if ($this->showactions && $this->cmid > 0) {
+            $data['actionurl'] = (new \moodle_url('/mod/googlemeet/action.php'))->out(false);
+            $data['cmid'] = $this->cmid;
+            $data['sesskey'] = sesskey();
+            $cancellationblocked = $state === sync_state::CANCELLING
+                && !empty($this->meeting->lasterrorcode);
+            $data['canretry'] = $state === sync_state::FAILED
+                || (
+                    $cancellationblocked &&
+                    $this->meeting->lasterrorcode !== 'authorization_required'
+                );
+            $data['canreconnect'] = $state === sync_state::DISCONNECTED
+                || (
+                    $cancellationblocked &&
+                    $this->meeting->lasterrorcode === 'authorization_required'
+                );
+            $data['cancancel'] = in_array($state, [
+                sync_state::DRAFT,
+                sync_state::QUEUED,
+                sync_state::SYNCING,
+                sync_state::PENDING,
+                sync_state::READY,
+                sync_state::FAILED,
+            ], true);
+            $data['hasactions'] = $data['canretry'] || $data['canreconnect'] || $data['cancancel'];
         }
 
         return $data;

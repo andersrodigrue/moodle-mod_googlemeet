@@ -48,6 +48,17 @@ $capabilities = [
         'clonepermissionsfrom' => 'moodle/course:manageactivities'
     ],
 
+    'mod/googlemeet:managemeeting' => [
+        'captype' => 'write',
+        'riskbitmask' => RISK_CONFIG | RISK_DATALOSS,
+        'contextlevel' => CONTEXT_MODULE,
+        'archetypes' => [
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
+        'clonepermissionsfrom' => 'moodle/course:manageactivities',
+    ],
+
     'mod/googlemeet:syncgoogledrive' => [
         'captype' => 'write',
         'contextlevel' => CONTEXT_MODULE,

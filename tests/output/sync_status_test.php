@@ -66,6 +66,49 @@ final class sync_status_test extends \advanced_testcase {
     }
 
     /**
+     * Only explicitly authorized owners receive POST command data.
+     */
+    public function test_owner_actions_are_state_scoped(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $failed = (new sync_status((object) [
+            'syncstatus' => sync_state::FAILED,
+            'timelastattempt' => 0,
+        ], false, 42, true))->export_for_template($this->renderer());
+        $this->assertTrue($failed['hasactions']);
+        $this->assertTrue($failed['canretry']);
+        $this->assertTrue($failed['cancancel']);
+        $this->assertFalse($failed['canreconnect']);
+        $this->assertSame(42, $failed['cmid']);
+        $this->assertSame(sesskey(), $failed['sesskey']);
+
+        $student = (new sync_status((object) [
+            'syncstatus' => sync_state::FAILED,
+        ], false, 42, false))->export_for_template($this->renderer());
+        $this->assertArrayNotHasKey('actionurl', $student);
+        $this->assertArrayNotHasKey('hasactions', $student);
+    }
+
+    /**
+     * Authorization failure during cancellation exposes reconnect without losing intent.
+     */
+    public function test_blocked_cancellation_exposes_reconnect(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $data = (new sync_status((object) [
+            'syncstatus' => sync_state::CANCELLING,
+            'lasterrorcode' => 'authorization_required',
+        ], true, 42, true))->export_for_template($this->renderer());
+
+        $this->assertFalse($data['inprogress']);
+        $this->assertFalse($data['canretry']);
+        $this->assertTrue($data['canreconnect']);
+        $this->assertFalse($data['cancancel']);
+    }
+
+    /**
      * Returns a renderer accepted by the templatable contract.
      *
      * @return \renderer_base

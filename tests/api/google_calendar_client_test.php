@@ -116,6 +116,38 @@ final class google_calendar_client_test extends \advanced_testcase {
     }
 
     /**
+     * Delete accepts an empty 204 response and sends guest notifications safely.
+     */
+    public function test_delete_accepts_empty_success(): void {
+        $http = new google_calendar_http_client();
+        $http->responses[] = ['status' => 204, 'body' => ''];
+
+        (new google_calendar_client($http))->delete_event('primary', 'event1', [
+            'sendUpdates' => 'all',
+        ]);
+
+        $this->assertSame('DELETE', $http->requests[0]['method']);
+        $this->assertSame(
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events/event1?sendUpdates=all',
+            $http->requests[0]['url']
+        );
+        $this->assertNull($http->requests[0]['body']);
+    }
+
+    /**
+     * Missing and gone events make delete retries idempotent.
+     */
+    public function test_delete_accepts_absent_event(): void {
+        foreach ([404, 410] as $status) {
+            $http = $this->http_error($status, 'notFound');
+            (new google_calendar_client($http))->delete_event('primary', 'event1', [
+                'sendUpdates' => 'none',
+            ]);
+            $this->assertSame('DELETE', $http->requests[0]['method']);
+        }
+    }
+
+    /**
      * A controlled ID conflict is converted to the adapter's idempotency signal.
      */
     public function test_insert_duplicate_throws_event_exists_exception(): void {

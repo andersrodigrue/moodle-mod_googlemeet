@@ -113,6 +113,23 @@ final class google_calendar_client implements calendar_client {
     }
 
     /**
+     * Deletes one Calendar event idempotently.
+     *
+     * @param string $calendarid Google Calendar identifier.
+     * @param string $eventid Google Calendar event identifier.
+     * @param array<string, mixed> $parameters Request parameters.
+     */
+    public function delete_event(string $calendarid, string $eventid, array $parameters): void {
+        $this->send(
+            'DELETE',
+            $this->event_url($calendarid, $eventid, $parameters),
+            null,
+            false,
+            true
+        );
+    }
+
+    /**
      * Builds an event collection URL.
      *
      * @param string $calendarid Google Calendar identifier.
@@ -180,15 +197,25 @@ final class google_calendar_client implements calendar_client {
      * @param string $url API URL.
      * @param array<string, mixed>|null $body Optional JSON body.
      * @param bool $insert Whether a duplicate means the controlled event already exists.
+     * @param bool $delete Whether an absent resource is an idempotent success.
      * @return array<string, mixed>
      */
-    private function send(string $method, string $url, ?array $body, bool $insert = false): array {
+    private function send(
+        string $method,
+        string $url,
+        ?array $body,
+        bool $insert = false,
+        bool $delete = false
+    ): array {
         $response = $this->httpclient->request($method, $url, $body);
         $status = (int) ($response['status'] ?? 0);
         $rawbody = (string) ($response['body'] ?? '');
         $decoded = json_decode($rawbody, true);
 
         if ($status >= 200 && $status < 300) {
+            if ($delete && ($rawbody === '' || $status === 204)) {
+                return [];
+            }
             if (!is_array($decoded)) {
                 throw new calendar_response_exception('Google Calendar returned malformed JSON.');
             }
@@ -196,6 +223,9 @@ final class google_calendar_client implements calendar_client {
         }
 
         $reason = $this->error_reason($decoded);
+        if ($delete && in_array($status, [404, 410], true)) {
+            return [];
+        }
         if ($insert && $status === 409) {
             throw new calendar_event_exists_exception('The controlled Calendar event already exists.');
         }

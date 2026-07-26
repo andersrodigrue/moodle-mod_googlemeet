@@ -32,6 +32,11 @@ This fork preserves the original GPL history and is being modernized specificall
 Moodle 5.2. See [the modernization foundation](docs/MODERNIZATION.md) for the current
 migration status and compatibility boundaries.
 
+Managed meetings now support asynchronous creation, reconciliation and explicit
+owner-only cancellation. Retry, reconnect and cancel commands are submitted through
+session-protected POST actions; remote Calendar deletion is never triggered merely
+by deleting the Moodle activity.
+
 ## Security
 
 If you discover any security related issues, please email [ronefel@hotmail.com](mailto:ronefel@hotmail.com) instead of using the issue tracker.

@@ -99,6 +99,20 @@ final class meeting_manager_calendar_client implements calendar_client {
 
         return $this->response;
     }
+
+    /**
+     * Deletes the configured event.
+     *
+     * @param string $calendarid Calendar ID.
+     * @param string $eventid Event ID.
+     * @param array<string, mixed> $parameters Request parameters.
+     */
+    public function delete_event(string $calendarid, string $eventid, array $parameters): void {
+        $this->operations[] = 'delete';
+        if ($this->exception !== null) {
+            throw $this->exception;
+        }
+    }
 }
 
 /**
@@ -140,6 +154,61 @@ final class meeting_manager_failing_provider implements calendar_adapter_provide
  */
 #[CoversClass(meeting_manager::class)]
 final class meeting_manager_test extends \advanced_testcase {
+
+    /**
+     * A managed cancellation is queued as the owner and deletes the remote event.
+     */
+    public function test_managed_cancellation_is_owner_scoped_and_settles(): void {
+        $this->resetAfterTest();
+
+        $owner = $this->getDataGenerator()->create_user();
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'owneruserid' => $owner->id,
+            'googleeventid' => 'event123',
+            'syncstatus' => sync_state::READY,
+            'meetinguri' => 'https://meet.google.com/abc-defg-hij',
+            'url' => 'https://meet.google.com/abc-defg-hij',
+        ]);
+        $client = new meeting_manager_calendar_client();
+        $manager = new meeting_manager(
+            calendaradapter: new calendar_adapter($client)
+        );
+
+        $this->assertTrue($manager->cancel($meeting->id));
+        $this->assertSame(sync_state::CANCELLING, (new sync_repository())->get($meeting->id)->syncstatus);
+
+        $this->expectOutputString(
+            get_string('syncmanagedcancelled', 'mod_googlemeet', $meeting->id) . "\n"
+        );
+        $manager->process($meeting->id);
+        $updated = (new sync_repository())->get($meeting->id);
+
+        $this->assertSame(sync_state::CANCELLED, $updated->syncstatus);
+        $this->assertSame(['delete'], $client->operations);
+        $this->assertNull($updated->meetinguri);
+        $this->assertSame('', $updated->url);
+        $this->assertSame('event123', $updated->googleeventid);
+
+        $tasks = \core\task\manager::get_adhoc_tasks(synchronise_meeting::class);
+        $this->assertCount(1, $tasks);
+        $this->assertSame((int) $owner->id, (int) reset($tasks)->get_userid());
+    }
+
+    /**
+     * Repeating a settled cancellation cannot create another task.
+     */
+    public function test_cancelled_meeting_cancellation_is_idempotent(): void {
+        $this->resetAfterTest();
+
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'syncstatus' => sync_state::CANCELLED,
+        ]);
+
+        $this->assertFalse((new meeting_manager())->cancel($meeting->id));
+        $this->assertSame([], \core\task\manager::get_adhoc_tasks(synchronise_meeting::class));
+    }
 
     /**
      * A manual meeting settles locally without a remote API.

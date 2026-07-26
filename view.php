@@ -85,7 +85,10 @@ if (
 ) {
     echo $OUTPUT->render(new sync_status(
         $googlemeet,
-        has_capability('mod/googlemeet:editrecording', $context)
+        has_capability('mod/googlemeet:editrecording', $context),
+        (int) $cm->id,
+        has_capability('mod/googlemeet:managemeeting', $context)
+            && (int) ($googlemeet->owneruserid ?? 0) === (int) $USER->id
     ));
 }
 

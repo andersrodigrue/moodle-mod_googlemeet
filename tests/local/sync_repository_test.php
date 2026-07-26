@@ -96,6 +96,53 @@ final class sync_repository_test extends \advanced_testcase {
     }
 
     /**
+     * Cancellation attempts remain cancelling and clear join metadata on success.
+     */
+    public function test_cancellation_attempt_and_completion_are_observable(): void {
+        $this->resetAfterTest();
+
+        $meeting = $this->create_meeting([
+            'syncstatus' => sync_state::CANCELLING,
+            'syncattempts' => 2,
+            'meetinguri' => 'https://meet.google.com/abc-defg-hij',
+            'url' => 'https://meet.google.com/abc-defg-hij',
+            'googleeventid' => 'event123',
+        ]);
+        $repository = new sync_repository();
+
+        $attempt = $repository->start_cancellation_attempt($meeting->id);
+        $this->assertSame(sync_state::CANCELLING, $attempt->syncstatus);
+        $this->assertSame(3, (int) $attempt->syncattempts);
+
+        $cancelled = $repository->mark_cancelled($meeting->id);
+        $this->assertSame(sync_state::CANCELLED, $cancelled->syncstatus);
+        $this->assertNull($cancelled->meetinguri);
+        $this->assertSame('', $cancelled->url);
+        $this->assertSame('event123', $cancelled->googleeventid);
+    }
+
+    /**
+     * A cancellation failure retains its operation intent for a safe retry.
+     */
+    public function test_cancellation_failure_keeps_cancelling_state(): void {
+        $this->resetAfterTest();
+
+        $meeting = $this->create_meeting([
+            'syncstatus' => sync_state::CANCELLING,
+        ]);
+
+        $blocked = (new sync_repository())->mark_cancellation_blocked(
+            $meeting->id,
+            'authorization_required',
+            'Reconnect safely'
+        );
+
+        $this->assertSame(sync_state::CANCELLING, $blocked->syncstatus);
+        $this->assertSame('authorization_required', $blocked->lasterrorcode);
+        $this->assertSame('Reconnect safely', $blocked->lasterrormessage);
+    }
+
+    /**
      * Failure details are sanitized and bounded before persistence.
      */
     public function test_failure_details_are_sanitized(): void {

@@ -204,6 +204,59 @@ final class sync_repository {
     }
 
     /**
+     * Starts or resumes a cancellation attempt without leaving its state.
+     *
+     * @param int $googlemeetid Activity instance ID.
+     * @return \stdClass Updated activity.
+     */
+    public function start_cancellation_attempt(int $googlemeetid): \stdClass {
+        $meeting = $this->get($googlemeetid);
+
+        return $this->transition($googlemeetid, sync_state::CANCELLING, [
+            'syncattempts' => (int) $meeting->syncattempts + 1,
+            'timelastattempt' => $this->clock->time(),
+            'lasterrorcode' => null,
+            'lasterrormessage' => null,
+        ]);
+    }
+
+    /**
+     * Completes an idempotent remote cancellation and removes join metadata.
+     *
+     * Remote identifiers are retained as an audit and retry boundary.
+     *
+     * @param int $googlemeetid Activity instance ID.
+     * @return \stdClass Updated activity.
+     */
+    public function mark_cancelled(int $googlemeetid): \stdClass {
+        return $this->transition($googlemeetid, sync_state::CANCELLED, [
+            'meetinguri' => null,
+            'url' => '',
+            'conferenceid' => null,
+            'meetingcode' => null,
+            'conferencestatus' => null,
+            'lasterrorcode' => null,
+            'lasterrormessage' => null,
+        ]);
+    }
+
+    /**
+     * Keeps cancellation intent while recording a safe actionable failure.
+     *
+     * @param int $googlemeetid Activity instance ID.
+     * @param string $code Stable, non-secret error code.
+     * @param string $message Safe administrator-facing message.
+     * @return \stdClass Updated activity.
+     */
+    public function mark_cancellation_blocked(int $googlemeetid, string $code, string $message): \stdClass {
+        return $this->transition(
+            $googlemeetid,
+            sync_state::CANCELLING,
+            $this->normalise_error($code, $message)
+        );
+    }
+
+    /**
      * Persists one validated Calendar result and advances the local state.
      *
      * @param int $googlemeetid Activity instance ID.

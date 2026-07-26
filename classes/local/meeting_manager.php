@@ -119,6 +119,41 @@ final class meeting_manager {
     }
 
     /**
+     * Requests idempotent cancellation of a managed meeting.
+     *
+     * @param int $googlemeetid Activity instance ID.
+     * @param int|null $userid User the task should run as, or null to use the stored owner.
+     * @return bool True when a new task was queued.
+     */
+    public function cancel(int $googlemeetid, ?int $userid = null): bool {
+        return $this->lock->with_lock($googlemeetid, function () use ($googlemeetid, $userid): bool {
+            $meeting = $this->repository->get($googlemeetid);
+            if ($meeting->integrationmode !== integration_mode::MANAGED) {
+                throw new \coding_exception('Only managed meetings can be cancelled remotely.');
+            }
+            if ($meeting->syncstatus === sync_state::CANCELLED) {
+                return false;
+            }
+            if ($meeting->syncstatus === sync_state::DRAFT && empty($meeting->googleeventid)) {
+                $this->repository->transition($googlemeetid, sync_state::CANCELLED);
+                return false;
+            }
+
+            if ($meeting->syncstatus !== sync_state::CANCELLING) {
+                sync_state::assert_transition($meeting->syncstatus, sync_state::CANCELLING);
+                $meeting = $this->repository->transition($googlemeetid, sync_state::CANCELLING);
+            }
+
+            $taskuserid = $userid ?? (int) ($meeting->owneruserid ?? 0);
+            if ($taskuserid <= 0) {
+                throw new \coding_exception('A managed meeting owner is required for cancellation.');
+            }
+
+            return synchronise_meeting::enqueue($googlemeetid, $taskuserid);
+        });
+    }
+
+    /**
      * Processes one queued synchronization under an exclusive activity lock.
      *
      * @param int $googlemeetid Activity instance ID.
@@ -133,7 +168,7 @@ final class meeting_manager {
 
             if (!in_array(
                 $meeting->syncstatus,
-                [sync_state::QUEUED, sync_state::SYNCING, sync_state::PENDING],
+                [sync_state::QUEUED, sync_state::SYNCING, sync_state::PENDING, sync_state::CANCELLING],
                 true
             )) {
                 mtrace(get_string('syncstateskipped', 'mod_googlemeet', (object) [
@@ -143,9 +178,79 @@ final class meeting_manager {
                 return;
             }
 
+            if ($meeting->syncstatus === sync_state::CANCELLING) {
+                $meeting = $this->repository->start_cancellation_attempt($googlemeetid);
+                $this->process_cancellation($meeting);
+                return;
+            }
+
             $meeting = $this->repository->start_attempt($googlemeetid);
             $this->process_attempt($meeting);
         });
+    }
+
+    /**
+     * Deletes a managed event and settles the local cancellation state.
+     *
+     * Transient transport failures intentionally escape so Moodle retries the
+     * same ad hoc task. Authorization and permanent failures remain observable.
+     *
+     * @param \stdClass $meeting Activity record in the cancelling state.
+     */
+    private function process_cancellation(\stdClass $meeting): void {
+        if ($meeting->integrationmode !== integration_mode::MANAGED) {
+            $this->repository->mark_failed(
+                (int) $meeting->id,
+                self::ERROR_INVALID_MODE,
+                get_string('syncinvalidintegrationmode', 'mod_googlemeet')
+            );
+            return;
+        }
+        if ($this->calendaradapter === null && $this->calendaradapterprovider === null) {
+            $this->repository->mark_failed(
+                (int) $meeting->id,
+                self::ERROR_ADAPTER_UNAVAILABLE,
+                get_string('syncadapterunavailable', 'mod_googlemeet')
+            );
+            return;
+        }
+
+        try {
+            $adapter = $this->calendaradapter
+                ?? $this->calendaradapterprovider->create($meeting);
+            $adapter->cancel($meeting);
+        } catch (calendar_authorization_exception $e) {
+            $this->repository->mark_cancellation_blocked(
+                (int) $meeting->id,
+                self::ERROR_AUTHORIZATION_REQUIRED,
+                get_string('syncoauthrequired', 'mod_googlemeet')
+            );
+            return;
+        } catch (calendar_api_exception $e) {
+            $this->repository->mark_cancellation_blocked(
+                (int) $meeting->id,
+                $e->error_code(),
+                get_string('synccalendarcancelapifailed', 'mod_googlemeet')
+            );
+            return;
+        } catch (calendar_configuration_exception $e) {
+            $this->repository->mark_cancellation_blocked(
+                (int) $meeting->id,
+                self::ERROR_CALENDAR_CONFIGURATION,
+                get_string('synccalendarconfigurationinvalid', 'mod_googlemeet')
+            );
+            return;
+        } catch (calendar_response_exception $e) {
+            $this->repository->mark_cancellation_blocked(
+                (int) $meeting->id,
+                self::ERROR_CALENDAR_RESPONSE,
+                get_string('synccalendarresponseinvalid', 'mod_googlemeet')
+            );
+            return;
+        }
+
+        $this->repository->mark_cancelled((int) $meeting->id);
+        mtrace(get_string('syncmanagedcancelled', 'mod_googlemeet', $meeting->id));
     }
 
     /**

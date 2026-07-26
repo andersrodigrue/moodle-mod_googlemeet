@@ -128,6 +128,31 @@ final class calendar_adapter {
     }
 
     /**
+     * Deletes the managed Calendar event, if it has been created.
+     *
+     * A missing local event ID is already cancelled from the remote
+     * perspective. The transport also treats Google 404 and 410 responses as
+     * success, making retries safe after ambiguous network failures.
+     *
+     * @param \stdClass $meeting Google Meet activity record.
+     */
+    public function cancel(\stdClass $meeting): void {
+        $this->validate_meeting($meeting, false);
+
+        $eventid = trim((string) ($meeting->googleeventid ?? ''));
+        if ($eventid === '') {
+            return;
+        }
+
+        $this->validate_event_id($eventid);
+        $this->client->delete_event(
+            trim((string) $meeting->calendarid),
+            $eventid,
+            ['sendUpdates' => (string) $meeting->sendupdates]
+        );
+    }
+
+    /**
      * Builds the mutable event fields.
      *
      * @param \stdClass $meeting Google Meet activity record.
@@ -229,7 +254,7 @@ final class calendar_adapter {
      *
      * @param \stdClass $meeting Google Meet activity record.
      */
-    private function validate_meeting(\stdClass $meeting): void {
+    private function validate_meeting(\stdClass $meeting, bool $requireeventdata = true): void {
         if (empty($meeting->id) || (int) $meeting->id <= 0) {
             throw new calendar_configuration_exception('A positive Google Meet activity ID is required.');
         }
@@ -239,23 +264,25 @@ final class calendar_adapter {
         if (trim((string) ($meeting->calendarid ?? '')) === '') {
             throw new calendar_configuration_exception('A Google Calendar identifier is required.');
         }
-        if (trim((string) ($meeting->name ?? $meeting->originalname ?? '')) === '') {
+        if ($requireeventdata && trim((string) ($meeting->name ?? $meeting->originalname ?? '')) === '') {
             throw new calendar_configuration_exception('A meeting name is required.');
         }
-        if ((int) ($meeting->timestart ?? 0) <= 0) {
+        if ($requireeventdata && (int) ($meeting->timestart ?? 0) <= 0) {
             throw new calendar_configuration_exception('A positive meeting start time is required.');
         }
-        if ((int) ($meeting->timeend ?? 0) <= (int) $meeting->timestart) {
+        if ($requireeventdata && (int) ($meeting->timeend ?? 0) <= (int) $meeting->timestart) {
             throw new calendar_configuration_exception('The meeting end time must be after its start time.');
         }
         if (!in_array((string) ($meeting->sendupdates ?? ''), self::SEND_UPDATES, true)) {
             throw new calendar_configuration_exception('The Calendar sendUpdates policy is invalid.');
         }
 
-        try {
-            new \DateTimeZone((string) ($meeting->timezone ?? ''));
-        } catch (\Exception $e) {
-            throw new calendar_configuration_exception('The meeting timezone is invalid.', 0, $e);
+        if ($requireeventdata) {
+            try {
+                new \DateTimeZone((string) ($meeting->timezone ?? ''));
+            } catch (\Exception $e) {
+                throw new calendar_configuration_exception('The meeting timezone is invalid.', 0, $e);
+            }
         }
     }
 
@@ -266,15 +293,24 @@ final class calendar_adapter {
      * @param string $requestid Conference request ID.
      */
     private function validate_identifiers(string $eventid, string $requestid): void {
+        $this->validate_event_id($eventid);
+        if ($requestid === '' || strlen($requestid) > 64) {
+            throw new calendar_configuration_exception('The Google conference request ID is invalid.');
+        }
+    }
+
+    /**
+     * Validates a persisted or generated Calendar event identifier.
+     *
+     * @param string $eventid Calendar event ID.
+     */
+    private function validate_event_id(string $eventid): void {
         if (
             strlen($eventid) < 5 ||
             strlen($eventid) > 255 ||
             !preg_match('/^[0-9a-v]+$/', $eventid)
         ) {
             throw new calendar_configuration_exception('The Google Calendar event ID is invalid.');
-        }
-        if ($requestid === '' || strlen($requestid) > 64) {
-            throw new calendar_configuration_exception('The Google conference request ID is invalid.');
         }
     }
 }

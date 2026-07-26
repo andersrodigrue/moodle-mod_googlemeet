@@ -108,6 +108,22 @@ final class calendar_adapter_test_client implements calendar_client {
 
         return $this->getresponse;
     }
+
+    /**
+     * Records a delete.
+     *
+     * @param string $calendarid Calendar ID.
+     * @param string $eventid Event ID.
+     * @param array<string, mixed> $parameters Request parameters.
+     */
+    public function delete_event(string $calendarid, string $eventid, array $parameters): void {
+        $this->calls[] = [
+            'method' => 'delete',
+            'calendarid' => $calendarid,
+            'eventid' => $eventid,
+            'parameters' => $parameters,
+        ];
+    }
 }
 
 /**
@@ -120,6 +136,39 @@ final class calendar_adapter_test_client implements calendar_client {
  */
 #[CoversClass(calendar_adapter::class)]
 final class calendar_adapter_test extends \advanced_testcase {
+
+    /**
+     * Cancellation deletes the persisted event with the guest policy.
+     */
+    public function test_cancel_deletes_persisted_event(): void {
+        $client = new calendar_adapter_test_client();
+        $meeting = $this->meeting([
+            'googleeventid' => 'event123',
+            'sendupdates' => 'externalOnly',
+        ]);
+
+        (new calendar_adapter($client))->cancel($meeting);
+
+        $this->assertSame([[
+            'method' => 'delete',
+            'calendarid' => 'primary',
+            'eventid' => 'event123',
+            'parameters' => ['sendUpdates' => 'externalOnly'],
+        ]], $client->calls);
+    }
+
+    /**
+     * Cancellation before remote creation is an idempotent no-op.
+     */
+    public function test_cancel_without_remote_event_is_noop(): void {
+        $client = new calendar_adapter_test_client();
+
+        (new calendar_adapter($client))->cancel($this->meeting([
+            'googleeventid' => null,
+        ]));
+
+        $this->assertSame([], $client->calls);
+    }
 
     /**
      * A new meeting uses controlled IDs and conferenceDataVersion 1.

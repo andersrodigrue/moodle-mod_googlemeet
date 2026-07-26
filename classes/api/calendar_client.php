@@ -64,4 +64,16 @@ interface calendar_client {
      * @return array<string, mixed> Calendar event resource.
      */
     public function get_event(string $calendarid, string $eventid): array;
+
+    /**
+     * Deletes one Calendar event.
+     *
+     * Implementations must treat an event that is already absent as a successful
+     * idempotent deletion.
+     *
+     * @param string $calendarid Google Calendar identifier.
+     * @param string $eventid Google Calendar event identifier.
+     * @param array<string, mixed> $parameters Request parameters.
+     */
+    public function delete_event(string $calendarid, string $eventid, array $parameters): void;
 }
