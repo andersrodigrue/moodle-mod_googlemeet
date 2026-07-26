@@ -16,6 +16,8 @@
 
 namespace mod_googlemeet;
 
+require_once(__DIR__ . '/../lib.php');
+
 use PHPUnit\Framework\Attributes\CoversFunction;
 
 /**
