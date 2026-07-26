@@ -16,6 +16,8 @@
 
 namespace mod_googlemeet;
 
+use PHPUnit\Framework\Attributes\CoversMethod;
+
 /**
  * Tests for the Google REST endpoint definitions.
  *
@@ -23,14 +25,12 @@ namespace mod_googlemeet;
  * @category    test
  * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @coversDefaultClass \mod_googlemeet\rest
  */
+#[CoversMethod(rest::class, 'get_api_functions')]
 final class rest_test extends \advanced_testcase {
 
     /**
      * The plugin must not expose an endpoint that changes Drive permissions.
-     *
-     * @covers ::get_api_functions
      */
     public function test_drive_permission_mutation_is_not_exposed(): void {
         $reflection = new \ReflectionClass(rest::class);

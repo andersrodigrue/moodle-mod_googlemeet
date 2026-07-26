@@ -16,6 +16,9 @@
 
 namespace mod_googlemeet;
 
+use PHPUnit\Framework\Attributes\CoversMethod;
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+
 /**
  * Tests for the legacy external functions.
  *
@@ -23,8 +26,12 @@ namespace mod_googlemeet;
  * @category    test
  * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @coversDefaultClass \mod_googlemeet_external
  */
+#[CoversMethod(\mod_googlemeet_external::class, 'recording_edit_name')]
+#[CoversMethod(\mod_googlemeet_external::class, 'showhide_recording')]
+#[CoversMethod(\mod_googlemeet_external::class, 'sync_recordings')]
+#[CoversMethod(\mod_googlemeet_external::class, 'delete_all_recordings')]
+#[RunTestsInSeparateProcesses]
 final class external_test extends \advanced_testcase {
 
     /**
@@ -39,9 +46,6 @@ final class external_test extends \advanced_testcase {
 
     /**
      * Editing a recording through its own activity remains supported.
-     *
-     * @covers ::recording_edit_name
-     * @covers ::showhide_recording
      */
     public function test_recording_actions_accept_their_own_activity(): void {
         $fixture = $this->create_security_fixture();
@@ -62,8 +66,6 @@ final class external_test extends \advanced_testcase {
 
     /**
      * A recording cannot be renamed through a different activity context.
-     *
-     * @covers ::recording_edit_name
      */
     public function test_recording_edit_name_rejects_another_activity(): void {
         global $DB;
@@ -87,8 +89,6 @@ final class external_test extends \advanced_testcase {
 
     /**
      * A recording cannot be shown or hidden through a different activity context.
-     *
-     * @covers ::showhide_recording
      */
     public function test_showhide_recording_rejects_another_activity(): void {
         global $DB;
@@ -111,8 +111,6 @@ final class external_test extends \advanced_testcase {
 
     /**
      * Recording synchronization cannot target another activity.
-     *
-     * @covers ::sync_recordings
      */
     public function test_sync_recordings_rejects_another_activity(): void {
         global $DB;
@@ -136,8 +134,6 @@ final class external_test extends \advanced_testcase {
 
     /**
      * Bulk deletion cannot target another activity.
-     *
-     * @covers ::delete_all_recordings
      */
     public function test_delete_all_recordings_rejects_another_activity(): void {
         global $DB;
