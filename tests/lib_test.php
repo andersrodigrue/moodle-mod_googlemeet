@@ -35,7 +35,7 @@ final class lib_test extends \basic_testcase {
     public function test_activity_purpose_is_communication(): void {
         $this->assertSame(
             MOD_PURPOSE_COMMUNICATION,
-            googlemeet_supports(FEATURE_MOD_PURPOSE)
+            \googlemeet_supports(FEATURE_MOD_PURPOSE)
         );
     }
 }
