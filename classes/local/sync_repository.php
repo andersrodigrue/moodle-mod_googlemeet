@@ -49,6 +49,7 @@ final class sync_repository {
         'conferenceid',
         'meetingcode',
         'meetinguri',
+        'url',
         'conferencestatus',
     ];
 
@@ -219,6 +220,10 @@ final class sync_repository {
             calendar_event_result::FAILURE => sync_state::FAILED,
         };
         $changes = $result->database_fields();
+        if (!empty($changes['meetinguri'])) {
+            // Keep the legacy field populated until all consumers use meetinguri.
+            $changes['url'] = $changes['meetinguri'];
+        }
 
         if ($result->status() === calendar_event_result::FAILURE) {
             $changes += $this->normalise_error(

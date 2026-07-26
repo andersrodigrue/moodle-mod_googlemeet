@@ -340,6 +340,7 @@ final class meeting_manager_test extends \advanced_testcase {
         $this->assertSame(sync_state::READY, $updated->syncstatus);
         $this->assertSame('success', $updated->conferencestatus);
         $this->assertSame('https://meet.google.com/abc-defg-hij', $updated->meetinguri);
+        $this->assertSame('https://meet.google.com/abc-defg-hij', $updated->url);
         $this->assertSame('abc-defg-hij', $updated->meetingcode);
         $this->assertSame(['get'], $client->operations);
     }
@@ -572,6 +573,23 @@ final class meeting_manager_test extends \advanced_testcase {
         $this->assertTrue(synchronise_meeting::enqueue($meeting->id, $owner->id));
         $this->assertFalse((new meeting_manager())->queue($meeting->id));
         $this->assertSame(sync_state::READY, (new sync_repository())->get($meeting->id)->syncstatus);
+    }
+
+    /**
+     * An edit during a running attempt schedules reconciliation without rewinding state.
+     */
+    public function test_queue_from_syncing_keeps_running_state(): void {
+        $this->resetAfterTest();
+
+        $owner = $this->getDataGenerator()->create_user();
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'owneruserid' => $owner->id,
+            'syncstatus' => sync_state::SYNCING,
+        ]);
+
+        $this->assertTrue((new meeting_manager())->queue($meeting->id));
+        $this->assertSame(sync_state::SYNCING, (new sync_repository())->get($meeting->id)->syncstatus);
     }
 
     /**

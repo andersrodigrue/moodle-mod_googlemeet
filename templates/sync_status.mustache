@@ -1,0 +1,37 @@
+{{!
+    @template mod_googlemeet/sync_status
+
+    Boost-compatible state summary for the managed Calendar lifecycle.
+}}
+<div class="card googlemeet-sync-status mb-3" data-region="googlemeet-sync-status" data-state="{{state}}">
+    <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <h3 class="h5 mb-0">{{#str}} synchronizationstatus, mod_googlemeet {{/str}}</h3>
+            <span class="badge {{badgeclass}}">{{label}}</span>
+            {{#inprogress}}
+                <span class="spinner-border spinner-border-sm" role="status">
+                    <span class="visually-hidden">{{#str}} loading, mod_googlemeet {{/str}}</span>
+                </span>
+            {{/inprogress}}
+        </div>
+        <p class="mb-0 mt-2">{{message}}</p>
+        {{#lastattempttext}}
+            <p class="small text-muted mb-0 mt-2">
+                {{lastattempttext}}
+            </p>
+        {{/lastattempttext}}
+        {{#haserror}}
+            <details class="mt-2">
+                <summary>{{#str}} syncdiagnosticdetails, mod_googlemeet {{/str}}</summary>
+                <dl class="row mb-0 mt-2">
+                    <dt class="col-sm-3">{{#str}} syncerrorcode, mod_googlemeet {{/str}}</dt>
+                    <dd class="col-sm-9"><code>{{errorcode}}</code></dd>
+                    {{#errormessage}}
+                        <dt class="col-sm-3">{{#str}} syncerrormessage, mod_googlemeet {{/str}}</dt>
+                        <dd class="col-sm-9">{{errormessage}}</dd>
+                    {{/errormessage}}
+                </dl>
+            </details>
+        {{/haserror}}
+    </div>
+</div>

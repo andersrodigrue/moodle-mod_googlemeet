@@ -138,9 +138,48 @@ The production task now composes this OAuth-aware client for records already in
 `managed` mode. Existing `manual` and `legacy` records do not begin making Google
 requests as a side effect of upgrade.
 
+## Managed activity form and Boost status
+
+The fifth structural slice connects teacher actions to the managed boundary:
+
+- the activity form now offers an explicit choice between a Calendar-managed
+  meeting and an existing manual Meet link;
+- managed mode uses the Calendar-only OAuth client; the legacy Drive + Calendar
+  client no longer creates events during activity form submission;
+- the teacher authorizes Google Calendar before saving a managed activity;
+- the callback validates the Moodle session key, configured issuer and current user;
+- owner and issuer identifiers are always derived on the server and cannot be
+  supplied or transferred through submitted form fields;
+- existing managed meetings cannot be silently downgraded to manual links or taken
+  over by a different editor;
+- the legacy date controls are normalized to absolute `timestart` and `timeend`
+  values in the owner's IANA timezone;
+- weekly form recurrence becomes one canonical RFC 5545 `RRULE`, with a UTC
+  inclusive end-of-day boundary;
+- new managed activities are inserted as `draft` and immediately queued in the
+  owner's context;
+- managed edits preserve remote identity and queue reconciliation instead of
+  making a synchronous Google request;
+- a concurrent edit can queue follow-up reconciliation without rewinding an active
+  `syncing` state;
+- successful synchronization mirrors the validated `meetinguri` into the legacy
+  `url` field while older consumers are being migrated;
+- the activity page renders a Boost-compatible status card for every managed or
+  unsettled meeting;
+- students see a join button only after synchronization reaches `ready` with a
+  valid `https://meet.google.com/...` URI;
+- sanitized diagnostics are visible only to users with the existing editing
+  capability;
+- manual mode remains deliberate and never receives an OAuth owner, issuer or
+  remote Calendar identity.
+
+Legacy activities remain classified as `legacy` until a teacher edits and explicitly
+chooses managed Calendar ownership or confirms the preserved link as manual.
+
 ## Next structural slice
 
-The next slice will replace the legacy create/update form flow with explicit
-per-teacher authorization and managed queueing. It must normalize the existing form
-dates and recurrence into `timestart`, `timeend`, `timezone` and `recurrence`, expose
-the synchronization state in Boost, and retain a deliberate manual-link option.
+The next slice should complete remote deletion/cancellation, add an owner-only
+reconnect/retry action using POST plus `sesskey`, and migrate remaining legacy Drive
+recording flows away from the broad combined OAuth client. It should also implement
+the Moodle 5.2 activity overview integration and extend backup/restore tests for the
+new managed lifecycle.

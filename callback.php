@@ -24,6 +24,7 @@
  */
 
 use mod_googlemeet\client;
+use mod_googlemeet\local\oauth_manager;
 
 require_once(__DIR__ . '/../../config.php');
 require_once(__DIR__ . '/lib.php');
@@ -36,6 +37,37 @@ header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
 
 // Wait as long as it takes for this script to finish.
 core_php_time_limit::raise();
+
+if (optional_param('managed', 0, PARAM_BOOL)) {
+    require_sesskey();
+
+    $issuerid = required_param('issuerid', PARAM_INT);
+    if ($issuerid <= 0 || $issuerid !== (int) get_config('googlemeet', 'issuerid')) {
+        throw new moodle_exception('managedoauthunavailable', 'mod_googlemeet');
+    }
+
+    $oauthclient = (new oauth_manager())->authorization_client($issuerid, (int) $USER->id);
+    if (!$oauthclient->is_logged_in()) {
+        throw new moodle_exception('managedoauthfailed', 'mod_googlemeet');
+    }
+
+    $PAGE->set_url('/mod/googlemeet/callback.php', [
+        'managed' => 1,
+        'issuerid' => $issuerid,
+    ]);
+    $PAGE->set_context(context_system::instance());
+    $PAGE->set_pagelayout('popup');
+    $PAGE->set_title(get_string('managedoauthconnected', 'mod_googlemeet'));
+    $PAGE->requires->js_init_code(
+        'if (window.opener) { window.opener.location.reload(); window.close(); }'
+    );
+
+    echo $OUTPUT->header();
+    echo $OUTPUT->notification(get_string('managedoauthconnected', 'mod_googlemeet'), 'success');
+    echo html_writer::tag('p', get_string('managedoauthclose', 'mod_googlemeet'));
+    echo $OUTPUT->footer();
+    exit;
+}
 
 $client = new client();
 

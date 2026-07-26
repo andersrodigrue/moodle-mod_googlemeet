@@ -114,6 +114,7 @@ final class oauth_manager_test extends \advanced_testcase {
         $this->assertTrue($captured[2]);
         $this->assertSame(1, (int) $captured[0]->get_param('managed'));
         $this->assertSame(17, (int) $captured[0]->get_param('issuerid'));
+        $this->assertSame(sesskey(), $captured[0]->get_param('sesskey'));
     }
 
     /**

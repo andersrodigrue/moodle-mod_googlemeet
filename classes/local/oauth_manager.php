@@ -91,6 +91,23 @@ final class oauth_manager {
     }
 
     /**
+     * Returns the owner-scoped client used by the explicit form authorization flow.
+     *
+     * This method does not require an existing activity because authorization can
+     * happen before Moodle inserts the new module instance.
+     *
+     * @param int $issuerid OAuth issuer selected by the administrator.
+     * @param int $owneruserid Moodle user who will own the managed event.
+     * @return \core\oauth2\client
+     */
+    public function authorization_client(int $issuerid, int $owneruserid): \core\oauth2\client {
+        return $this->build_client((object) [
+            'owneruserid' => $owneruserid,
+            'oauthissuerid' => $issuerid,
+        ]);
+    }
+
+    /**
      * Removes the plugin-scoped local access and refresh token through Moodle.
      *
      * This deliberately does not call Google's global revocation endpoint:
@@ -149,6 +166,7 @@ final class oauth_manager {
         $returnurl = new \moodle_url('/mod/googlemeet/callback.php', [
             'managed' => 1,
             'issuerid' => $issuerid,
+            'sesskey' => sesskey(),
         ]);
         $client = ($this->clientfactory)(
             $issuer,

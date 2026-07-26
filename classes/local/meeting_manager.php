@@ -97,7 +97,7 @@ final class meeting_manager {
             $meeting = $this->repository->get($googlemeetid);
             $transitionrequired = !in_array(
                 $meeting->syncstatus,
-                [sync_state::QUEUED, sync_state::PENDING],
+                [sync_state::QUEUED, sync_state::SYNCING, sync_state::PENDING],
                 true
             );
             if ($transitionrequired) {

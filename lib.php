@@ -22,8 +22,11 @@
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-use mod_googlemeet\client;
+use mod_googlemeet\api\calendar_authorization_exception;
 use mod_googlemeet\local\integration_mode;
+use mod_googlemeet\local\meeting_form_data;
+use mod_googlemeet\local\meeting_manager;
+use mod_googlemeet\local\oauth_manager;
 use mod_googlemeet\local\sync_state;
 
 /**
@@ -71,30 +74,14 @@ function googlemeet_supports($feature) {
  * @return int The id of the newly inserted record.
  */
 function googlemeet_add_instance($googlemeet, $mform = null) {
-    global $DB, $CFG;
+    global $DB, $CFG, $USER;
     require_once($CFG->dirroot . '/mod/googlemeet/locallib.php');
 
-    $client = new client();
-
-    // Se não esta logado na conta do Google.
-    if (!$client->check_login()) {
-        $url = googlemeet_clear_url($googlemeet->url);
-        if ($url) {
-            $googlemeet->url = $url;
-        }
-        $googlemeet->integrationmode = integration_mode::MANUAL;
-        $googlemeet->syncstatus = sync_state::READY;
-    } else {
-        $calendarevent = $client->create_meeting_event($googlemeet);
-        $googlemeet->url = $calendarevent->hangoutLink;
-
-        $link = new moodle_url($calendarevent->htmlLink);
-        $googlemeet->eventid = $link->get_param('eid');
-        $googlemeet->originalname = $calendarevent->summary;
-        $googlemeet->creatoremail = $calendarevent->creator->email;
-        $googlemeet->integrationmode = integration_mode::LEGACY;
-        $googlemeet->syncstatus = sync_state::DISCONNECTED;
-    }
+    $googlemeet = (new meeting_form_data())->normalize(
+        $googlemeet,
+        get_user_timezone($USER->timezone)
+    );
+    $googlemeet = googlemeet_prepare_integration($googlemeet);
 
     if (isset($googlemeet->days)) {
         $googlemeet->days = json_encode($googlemeet->days);
@@ -115,6 +102,9 @@ function googlemeet_add_instance($googlemeet, $mform = null) {
     $events = googlemeet_construct_events_data_for_add($googlemeet);
 
     googlemeet_set_events($googlemeet, $events);
+    if ($googlemeet->integrationmode === integration_mode::MANAGED) {
+        (new meeting_manager())->queue((int) $googlemeet->id, (int) $googlemeet->owneruserid);
+    }
 
     return $googlemeet->id;
 }
@@ -130,42 +120,161 @@ function googlemeet_add_instance($googlemeet, $mform = null) {
  * @return bool True if successful, false otherwise.
  */
 function googlemeet_update_instance($googlemeet, $mform = null) {
-    global $DB, $CFG;
+    global $DB, $CFG, $USER;
     require_once($CFG->dirroot . '/mod/googlemeet/locallib.php');
 
     $googlemeet->id = $googlemeet->instance;
+    $existing = $DB->get_record('googlemeet', ['id' => $googlemeet->id], '*', MUST_EXIST);
+    if (empty($googlemeet->integrationmode)) {
+        $googlemeet->integrationmode = $existing->integrationmode;
+    }
 
-    if (isset($googlemeet->addmultiply)) {
-        if (isset($googlemeet->days)) {
-            $googlemeet->days = json_encode($googlemeet->days);
-        }
-    } else {
+    if (!isset($googlemeet->addmultiply)) {
         $googlemeet->addmultiply = 0;
         $googlemeet->days = null;
         $googlemeet->eventenddate = $googlemeet->eventdate;
         $googlemeet->period = null;
     }
 
-    if (isset($googlemeet->url)) {
-        $url = googlemeet_clear_url($googlemeet->url);
-        if ($url) {
-            $googlemeet->url = $url;
-            $googlemeet->meetinguri = $url;
-        }
-    }
+    $googlemeet = (new meeting_form_data())->normalize(
+        $googlemeet,
+        get_user_timezone($USER->timezone)
+    );
+    $googlemeet = googlemeet_prepare_integration($googlemeet, $existing);
 
+    if (isset($googlemeet->days)) {
+        $googlemeet->days = json_encode($googlemeet->days);
+    }
     $googlemeet->timemodified = time();
 
     $googlemeetupdated = $DB->update_record('googlemeet', $googlemeet);
 
     if (isset($googlemeet->days)) {
-        $googlemeet->days = json_decode($googlemeet->days);
+        $googlemeet->days = json_decode($googlemeet->days, true);
     }
     $events = googlemeet_construct_events_data_for_add($googlemeet);
 
     googlemeet_set_events($googlemeet, $events);
+    if ($googlemeet->integrationmode === integration_mode::MANAGED) {
+        (new meeting_manager())->queue((int) $googlemeet->id, (int) $googlemeet->owneruserid);
+    }
 
     return $googlemeetupdated;
+}
+
+/**
+ * Applies server-owned integration fields to normalized form data.
+ *
+ * OAuth owner, issuer and remote identifiers never come from submitted form
+ * fields. Existing managed meetings cannot be silently transferred to another
+ * Moodle user or downgraded to a manual link.
+ *
+ * @param stdClass $googlemeet Normalized form data.
+ * @param stdClass|null $existing Existing activity during update.
+ * @param oauth_manager|null $oauthmanager OAuth manager override for tests.
+ * @return stdClass Prepared record.
+ */
+function googlemeet_prepare_integration(
+    stdClass $googlemeet,
+    ?stdClass $existing = null,
+    ?oauth_manager $oauthmanager = null
+): stdClass {
+    global $CFG, $USER;
+
+    require_once($CFG->dirroot . '/mod/googlemeet/locallib.php');
+
+    $mode = (string) ($googlemeet->integrationmode ?? '');
+    if (
+        $existing !== null &&
+        $existing->integrationmode === integration_mode::MANAGED &&
+        $mode !== integration_mode::MANAGED
+    ) {
+        throw new moodle_exception('managedmodecannotchange', 'mod_googlemeet');
+    }
+    if ($mode === integration_mode::MANUAL) {
+        $url = googlemeet_clear_url((string) ($googlemeet->url ?? ''));
+        if ($url === null) {
+            throw new moodle_exception('url_failed', 'mod_googlemeet');
+        }
+
+        $googlemeet->url = $url;
+        $googlemeet->meetinguri = $url;
+        $googlemeet->integrationmode = integration_mode::MANUAL;
+        $googlemeet->owneruserid = null;
+        $googlemeet->oauthissuerid = null;
+        $googlemeet->calendarid = null;
+        $googlemeet->eventid = null;
+        $googlemeet->googleeventid = null;
+        $googlemeet->googleeventhtmlurl = null;
+        $googlemeet->googleeventetag = null;
+        $googlemeet->requestid = null;
+        $googlemeet->conferenceid = null;
+        $googlemeet->meetingcode = null;
+        $googlemeet->syncstatus = sync_state::READY;
+        $googlemeet->conferencestatus = null;
+        $googlemeet->syncattempts = 0;
+        $googlemeet->lasterrorcode = null;
+        $googlemeet->lasterrormessage = null;
+        $googlemeet->timelastattempt = null;
+
+        return $googlemeet;
+    }
+
+    if ($mode !== integration_mode::MANAGED) {
+        throw new moodle_exception('invalidintegrationmode', 'mod_googlemeet');
+    }
+
+    if (
+        $existing !== null &&
+        $existing->integrationmode === integration_mode::MANAGED &&
+        (int) $existing->owneruserid !== (int) $USER->id
+    ) {
+        throw new moodle_exception('managedowneronly', 'mod_googlemeet');
+    }
+
+    $issuerid = (int) get_config('googlemeet', 'issuerid');
+    if ($issuerid <= 0) {
+        throw new moodle_exception('managedoauthunavailable', 'mod_googlemeet');
+    }
+    try {
+        $client = ($oauthmanager ?? new oauth_manager())->authorization_client($issuerid, (int) $USER->id);
+        $authorized = $client->is_logged_in();
+    } catch (calendar_authorization_exception | moodle_exception) {
+        throw new moodle_exception('managedoauthunavailable', 'mod_googlemeet');
+    }
+    if (!$authorized) {
+        throw new moodle_exception('managedoauthrequired', 'mod_googlemeet');
+    }
+
+    $googlemeet->integrationmode = integration_mode::MANAGED;
+    $googlemeet->owneruserid = (int) $USER->id;
+    $googlemeet->oauthissuerid = $issuerid;
+    $googlemeet->calendarid = 'primary';
+    $googlemeet->creatoremail = null;
+
+    if ($existing !== null && $existing->integrationmode === integration_mode::MANAGED) {
+        $googlemeet->url = (string) $existing->url;
+        $googlemeet->meetinguri = $existing->meetinguri;
+        return $googlemeet;
+    }
+
+    $googlemeet->url = '';
+    $googlemeet->meetinguri = null;
+    $googlemeet->eventid = null;
+    $googlemeet->googleeventid = null;
+    $googlemeet->googleeventhtmlurl = null;
+    $googlemeet->googleeventetag = null;
+    $googlemeet->requestid = null;
+    $googlemeet->conferenceid = null;
+    $googlemeet->meetingcode = null;
+    $googlemeet->conferencestatus = null;
+    $googlemeet->syncattempts = 0;
+    $googlemeet->lasterrorcode = null;
+    $googlemeet->lasterrormessage = null;
+    $googlemeet->timelastattempt = null;
+    $googlemeet->syncstatus = sync_state::DRAFT;
+
+    return $googlemeet;
 }
 
 /**

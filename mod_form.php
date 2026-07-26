@@ -24,7 +24,9 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-use mod_googlemeet\client;
+use mod_googlemeet\api\calendar_authorization_exception;
+use mod_googlemeet\local\integration_mode;
+use mod_googlemeet\local\oauth_manager;
 
 require_once($CFG->dirroot . '/course/moodleform_mod.php');
 require_once($CFG->dirroot . '/mod/googlemeet/locallib.php');
@@ -44,43 +46,21 @@ class mod_googlemeet_mod_form extends moodleform_mod {
      * Defines forms elements
      */
     public function definition() {
-        global $CFG, $OUTPUT;
+        global $CFG, $OUTPUT, $USER;
 
         $config = get_config('googlemeet');
         $mform = $this->_form;
-        $client = new client();
-
-        $logout = optional_param('logout', 0, PARAM_BOOL);
-        if ($logout) {
-            $client->logout();
-        }
-
-        if (empty($this->current->instance)) {
-            $clientislogged = optional_param('client_islogged', false, PARAM_BOOL);
-
-            // Was logged in before submitting the form and the google session expired after submitting the form.
-            if ($clientislogged && !$client->check_login()) {
-                $mform->addElement('html', html_writer::div(get_string('sessionexpired', 'googlemeet') .
-                    $client->print_login_popup(), 'mdl-align alert alert-danger googlemeet_loginbutton'
-                ));
-
-                // Whether the customer is enabled and if not logged in to the Google account.
-            } else if ($client->enabled && !$client->check_login()) {
-                $mform->addElement('html', html_writer::div(get_string('logintoyourgoogleaccount', 'googlemeet') .
-                    $client->print_login_popup(), 'mdl-align alert alert-info googlemeet_loginbutton'
-                ));
+        $issuerid = (int) ($config->issuerid ?? 0);
+        $managedclient = null;
+        $managedauthorized = false;
+        if ($issuerid > 0) {
+            try {
+                $managedclient = (new oauth_manager())->authorization_client($issuerid, (int) $USER->id);
+                $managedauthorized = $managedclient->is_logged_in();
+            } catch (calendar_authorization_exception | moodle_exception) {
+                $managedclient = null;
             }
-
-            // If is logged in, shows Google account information.
-            if ($client->check_login()) {
-                $mform->addElement('html', $client->print_user_info('calendar'));
-                $mform->addElement('hidden', 'client_islogged', true);
-            }
-
-        } else {
-            $mform->addElement('hidden', 'client_islogged', false);
         }
-        $mform->setType('client_islogged', PARAM_BOOL);
 
         // Adding the "general" fieldset, where all the common settings are shown.
         $mform->addElement('header', 'general', get_string('general', 'form'));
@@ -102,6 +82,57 @@ class mod_googlemeet_mod_form extends moodleform_mod {
         $attributes = $element->getAttributes();
         $attributes['rows'] = 5;
         $element->setAttributes($attributes);
+
+        $mform->addElement('header', 'headerintegration', get_string('integration', 'googlemeet'));
+        $mform->addElement('select', 'integrationmode', get_string('integrationmode', 'googlemeet'), [
+            integration_mode::MANAGED => get_string('integrationmodemanaged', 'googlemeet'),
+            integration_mode::MANUAL => get_string('integrationmodemanual', 'googlemeet'),
+        ]);
+        $mform->setDefault(
+            'integrationmode',
+            $issuerid > 0 ? integration_mode::MANAGED : integration_mode::MANUAL
+        );
+        $mform->addHelpButton('integrationmode', 'integrationmode', 'googlemeet');
+
+        if (
+            !empty($this->current->instance) &&
+            ($this->current->integrationmode ?? null) === integration_mode::MANAGED
+        ) {
+            $mform->freeze('integrationmode');
+        } else if (
+            !empty($this->current->instance) &&
+            ($this->current->integrationmode ?? null) === integration_mode::LEGACY
+        ) {
+            $mform->addElement(
+                'static',
+                'legacyintegrationnotice',
+                '',
+                $OUTPUT->notification(get_string('integrationlegacyupgrade', 'googlemeet'), 'warning')
+            );
+        }
+
+        if ($managedauthorized) {
+            $oauthstatus = $OUTPUT->notification(get_string('managedoauthconnected', 'googlemeet'), 'success');
+        } else if ($managedclient !== null) {
+            $loginurl = new moodle_url($managedclient->get_login_url());
+            $button = html_writer::link(
+                $loginurl,
+                get_string('managedoauthconnect', 'googlemeet'),
+                [
+                    'class' => 'btn btn-primary',
+                    'target' => '_blank',
+                    'rel' => 'noopener',
+                ]
+            );
+            $oauthstatus = $OUTPUT->notification(
+                get_string('managedoauthrequired', 'googlemeet') . html_writer::div($button, 'mt-2'),
+                'info'
+            );
+        } else {
+            $oauthstatus = $OUTPUT->notification(get_string('managedoauthunavailable', 'googlemeet'), 'warning');
+        }
+        $mform->addElement('static', 'managedoauthstatus', get_string('managedoauth', 'googlemeet'), $oauthstatus);
+        $mform->hideIf('managedoauthstatus', 'integrationmode', 'neq', integration_mode::MANAGED);
 
         $hours = [];
         $minutes = [];
@@ -188,30 +219,21 @@ class mod_googlemeet_mod_form extends moodleform_mod {
             $mform->setExpanded('headerroomurl');
         }
 
-        if (!empty($this->current->instance) && $client->enabled) {
-            $mform->addElement('static', 'url_caution', '',
-                $OUTPUT->notification(get_string('roomurl_caution', 'googlemeet'), 'warning')
-            );
-        }
+        $mform->addElement(
+            'static',
+            'url_desc',
+            '',
+            $OUTPUT->notification(get_string('managedroomurldesc', 'googlemeet'), 'info')
+        );
+        $mform->addElement('text', 'url', get_string('roomurl', 'googlemeet'), ['size' => '50']);
+        $mform->setType('url', PARAM_URL);
+        $mform->addHelpButton('url', 'url', 'googlemeet');
+        $mform->disabledIf('url', 'integrationmode', 'neq', integration_mode::MANUAL);
 
-        if ($client->check_login() && empty($this->current->instance)) {
-            $mform->addElement('static', 'url_desc', '', $OUTPUT->notification(get_string('roomurl_desc', 'googlemeet'), 'info'));
-            $mform->addElement('text', 'url', get_string('roomurl', 'googlemeet'), ['size' => '50', 'readonly' => true]);
-            $mform->setType('url', PARAM_RAW);
-
-            $mform->addElement('text', 'creatoremail', get_string('creatoremail', 'googlemeet'),
-                ['size' => '50', 'readonly' => true]
-            );
-            $mform->setType('creatoremail', PARAM_RAW);
-        } else {
-            $mform->addElement('text', 'url', get_string('roomurl', 'googlemeet'), ['size' => '50']);
-            $mform->setType('url', PARAM_URL);
-            $mform->addHelpButton('url', 'url', 'googlemeet');
-
-            $mform->addElement('text', 'creatoremail', get_string('creatoremail', 'googlemeet'), ['size' => '50']);
-            $mform->setType('creatoremail', PARAM_RAW);
-            $mform->addHelpButton('creatoremail', 'creatoremail', 'googlemeet');
-        }
+        $mform->addElement('text', 'creatoremail', get_string('creatoremail', 'googlemeet'), ['size' => '50']);
+        $mform->setType('creatoremail', PARAM_EMAIL);
+        $mform->addHelpButton('creatoremail', 'creatoremail', 'googlemeet');
+        $mform->disabledIf('creatoremail', 'integrationmode', 'neq', integration_mode::MANUAL);
 
         $mform->addElement('header', 'headernotification', get_string('notification', 'googlemeet'));
         if (!empty($config->notificationexpanded)) {
@@ -248,7 +270,12 @@ class mod_googlemeet_mod_form extends moodleform_mod {
      */
     public function data_preprocessing(&$defaultvalues) {
         if ($this->current->instance) {
-            $defaultvalues['days'] = json_decode($defaultvalues['days'], true);
+            $defaultvalues['days'] = empty($defaultvalues['days'])
+                ? []
+                : json_decode($defaultvalues['days'], true);
+            if (($defaultvalues['integrationmode'] ?? null) === integration_mode::LEGACY) {
+                $defaultvalues['integrationmode'] = integration_mode::MANUAL;
+            }
         }
     }
 
@@ -260,14 +287,14 @@ class mod_googlemeet_mod_form extends moodleform_mod {
      * @return array
      **/
     public function validation($data, $files) {
-        global $COURSE;
+        global $COURSE, $USER;
 
         $errors = parent::validation($data, $files);
 
         $starttime = $data['starthour'] * HOURSECS + $data['startminute'] * MINSECS;
         $endtime = $data['endhour'] * HOURSECS + $data['endminute'] * MINSECS;
 
-        if ($endtime < $starttime) {
+        if ($endtime <= $starttime) {
             $errors['eventtime'] = get_string('invalideventendtime', 'googlemeet');
         }
 
@@ -299,28 +326,36 @@ class mod_googlemeet_mod_form extends moodleform_mod {
             );
         }
 
-        $client = new client();
-        $clientislogged = optional_param('client_islogged', false, PARAM_BOOL);
-
-        if (empty($this->current->instance)) {
-            // Validates the url field only if not logged into Google account.
-            if (!$client->check_login() && !$clientislogged) {
-                $errors = $this->validate_url($data['url'], $errors);
-                if (!validate_email($data['creatoremail'])) {
-                    $errors['creatoremail'] = get_string('creatoremail_error', 'googlemeet');
-                }
-            }
-
-            // Forces an error if the Google session expired after submitting the form.
-            if (!$client->check_login() && $clientislogged) {
-                $errors['client_islogged'] = '';
-            }
-        } else {
-            // Validates url field if updating instance.
-            $errors = $this->validate_url($data['url'], $errors);
-            if (!validate_email($data['creatoremail'])) {
+        $mode = (string) ($data['integrationmode'] ?? '');
+        if ($mode === integration_mode::MANUAL) {
+            $errors = $this->validate_url((string) ($data['url'] ?? ''), $errors);
+            if (!validate_email((string) ($data['creatoremail'] ?? ''))) {
                 $errors['creatoremail'] = get_string('creatoremail_error', 'googlemeet');
             }
+        } else if ($mode === integration_mode::MANAGED) {
+            if (
+                !empty($this->current->instance) &&
+                ($this->current->integrationmode ?? null) === integration_mode::MANAGED &&
+                (int) ($this->current->owneruserid ?? 0) !== (int) $USER->id
+            ) {
+                $errors['integrationmode'] = get_string('managedowneronly', 'googlemeet');
+                return $errors;
+            }
+            $issuerid = (int) get_config('googlemeet', 'issuerid');
+            if ($issuerid <= 0) {
+                $errors['integrationmode'] = get_string('managedoauthunavailable', 'googlemeet');
+            } else {
+                try {
+                    $oauthclient = (new oauth_manager())->authorization_client($issuerid, (int) $USER->id);
+                    if (!$oauthclient->is_logged_in()) {
+                        $errors['integrationmode'] = get_string('managedoauthrequired', 'googlemeet');
+                    }
+                } catch (calendar_authorization_exception | moodle_exception) {
+                    $errors['integrationmode'] = get_string('managedoauthunavailable', 'googlemeet');
+                }
+            }
+        } else {
+            $errors['integrationmode'] = get_string('invalidintegrationmode', 'googlemeet');
         }
 
         return $errors;
