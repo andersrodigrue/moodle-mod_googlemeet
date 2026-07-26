@@ -41,6 +41,9 @@ final class meeting_manager_test extends \advanced_testcase {
             'syncstatus' => sync_state::QUEUED,
         ]);
 
+        $this->expectOutputString(
+            get_string('syncmanualready', 'mod_googlemeet', $meeting->id) . "\n"
+        );
         (new meeting_manager())->process($meeting->id);
         $updated = (new sync_repository())->get($meeting->id);
 
@@ -60,6 +63,9 @@ final class meeting_manager_test extends \advanced_testcase {
             'syncstatus' => sync_state::QUEUED,
         ]);
 
+        $this->expectOutputString(
+            get_string('synclegacydisconnected', 'mod_googlemeet', $meeting->id) . "\n"
+        );
         (new meeting_manager())->process($meeting->id);
         $updated = (new sync_repository())->get($meeting->id);
 
@@ -79,6 +85,9 @@ final class meeting_manager_test extends \advanced_testcase {
             'syncstatus' => sync_state::QUEUED,
         ]);
 
+        $this->expectOutputString(
+            get_string('syncmanageddeferred', 'mod_googlemeet', $meeting->id) . "\n"
+        );
         (new meeting_manager())->process($meeting->id);
         $updated = (new sync_repository())->get($meeting->id);
 
@@ -98,6 +107,12 @@ final class meeting_manager_test extends \advanced_testcase {
             'syncstatus' => sync_state::READY,
         ]);
 
+        $this->expectOutputString(
+            get_string('syncstateskipped', 'mod_googlemeet', (object) [
+                'id' => $meeting->id,
+                'state' => sync_state::READY,
+            ]) . "\n"
+        );
         (new meeting_manager())->process($meeting->id);
         $updated = (new sync_repository())->get($meeting->id);
 
@@ -125,8 +140,10 @@ final class meeting_manager_test extends \advanced_testcase {
 
         $tasks = \core\task\manager::get_adhoc_tasks(synchronise_meeting::class);
         $this->assertCount(1, $tasks);
-        $this->assertSame($owner->id, $tasks[0]->get_userid());
-        $this->assertSame($meeting->id, (int) $tasks[0]->get_custom_data()->googlemeetid);
+        $task = reset($tasks);
+        $this->assertInstanceOf(synchronise_meeting::class, $task);
+        $this->assertSame($owner->id, $task->get_userid());
+        $this->assertSame($meeting->id, (int) $task->get_custom_data()->googlemeetid);
     }
 
     /**

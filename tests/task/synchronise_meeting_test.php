@@ -58,6 +58,9 @@ final class synchronise_meeting_test extends \advanced_testcase {
             'syncstatus' => sync_state::QUEUED,
         ]);
 
+        $this->expectOutputString(
+            get_string('syncmanualready', 'mod_googlemeet', $meeting->id) . "\n"
+        );
         synchronise_meeting::create($meeting->id)->execute();
 
         $this->assertSame(sync_state::READY, (new sync_repository())->get($meeting->id)->syncstatus);
@@ -69,6 +72,9 @@ final class synchronise_meeting_test extends \advanced_testcase {
     public function test_execute_ignores_missing_meeting(): void {
         $this->resetAfterTest();
 
+        $this->expectOutputString(
+            get_string('syncactivitymissing', 'mod_googlemeet', 999999) . "\n"
+        );
         synchronise_meeting::create(999999)->execute();
         $this->addToAssertionCount(1);
     }
