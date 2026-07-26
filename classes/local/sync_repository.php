@@ -16,6 +16,8 @@
 
 namespace mod_googlemeet\local;
 
+use mod_googlemeet\api\calendar_event_result;
+
 /**
  * Persists the local state of a Google Meet synchronization.
  *
@@ -35,11 +37,19 @@ final class sync_repository {
     private const ERROR_MESSAGE_MAX_LENGTH = 2000;
 
     /** @var string[] Fields that may be updated together with a synchronization state. */
-    private const MUTABLE_SYNC_FIELDS = [
+    private const MUTABLE_STATE_FIELDS = [
         'syncattempts',
         'lasterrorcode',
         'lasterrormessage',
         'timelastattempt',
+        'googleeventid',
+        'googleeventhtmlurl',
+        'googleeventetag',
+        'requestid',
+        'conferenceid',
+        'meetingcode',
+        'meetinguri',
+        'conferencestatus',
     ];
 
     /** @var \core\clock Moodle clock. */
@@ -103,7 +113,7 @@ final class sync_repository {
         ];
 
         foreach ($changes as $field => $value) {
-            if (!in_array($field, self::MUTABLE_SYNC_FIELDS, true)) {
+            if (!in_array($field, self::MUTABLE_STATE_FIELDS, true)) {
                 throw new \coding_exception('Unsupported Google Meet synchronization field: ' . $field);
             }
             $update->{$field} = $value;
@@ -130,6 +140,34 @@ final class sync_repository {
             'lasterrorcode' => null,
             'lasterrormessage' => null,
         ]);
+    }
+
+    /**
+     * Persists one validated Calendar result and advances the local state.
+     *
+     * @param int $googlemeetid Activity instance ID.
+     * @param calendar_event_result $result Validated Calendar result.
+     * @return \stdClass Updated activity.
+     */
+    public function apply_calendar_result(
+        int $googlemeetid,
+        calendar_event_result $result
+    ): \stdClass {
+        $state = match ($result->status()) {
+            calendar_event_result::PENDING => sync_state::PENDING,
+            calendar_event_result::SUCCESS => sync_state::READY,
+            calendar_event_result::FAILURE => sync_state::FAILED,
+        };
+        $changes = $result->database_fields();
+
+        if ($result->status() === calendar_event_result::FAILURE) {
+            $changes += $this->normalise_error(
+                'conference_creation_failed',
+                get_string('syncconferencecreationfailed', 'mod_googlemeet')
+            );
+        }
+
+        return $this->transition($googlemeetid, $state, $changes);
     }
 
     /**

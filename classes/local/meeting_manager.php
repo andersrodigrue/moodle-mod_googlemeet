@@ -16,14 +16,18 @@
 
 namespace mod_googlemeet\local;
 
+use mod_googlemeet\api\calendar_adapter;
+use mod_googlemeet\api\calendar_configuration_exception;
+use mod_googlemeet\api\calendar_event_result;
+use mod_googlemeet\api\calendar_response_exception;
 use mod_googlemeet\task\synchronise_meeting;
 
 /**
  * Queues and coordinates local meeting synchronization work.
  *
- * This structural slice deliberately performs no Google API calls. Manual
- * meetings settle locally, legacy meetings remain disconnected, and managed
- * meetings fail safely until the Calendar adapter is introduced.
+ * Manual meetings settle locally and legacy meetings remain disconnected. A
+ * managed Calendar adapter can be injected without coupling this coordinator to
+ * OAuth or a particular Google SDK.
  *
  * @package     mod_googlemeet
  * @copyright   2026 Anderson Rodrigues
@@ -40,22 +44,34 @@ final class meeting_manager {
     /** Stable error code for an invalid persisted integration mode. */
     private const ERROR_INVALID_MODE = 'invalid_integration_mode';
 
+    /** Stable error code for invalid managed Calendar configuration. */
+    private const ERROR_CALENDAR_CONFIGURATION = 'calendar_configuration_invalid';
+
+    /** Stable error code for an inconsistent Calendar response. */
+    private const ERROR_CALENDAR_RESPONSE = 'calendar_response_invalid';
+
     /** @var sync_repository Synchronization repository. */
     private sync_repository $repository;
 
     /** @var meeting_lock Per-activity lock coordinator. */
     private meeting_lock $lock;
 
+    /** @var calendar_adapter|null Managed Calendar adapter. */
+    private ?calendar_adapter $calendaradapter;
+
     /**
      * @param sync_repository|null $repository Synchronization repository.
      * @param meeting_lock|null $lock Per-activity lock coordinator.
+     * @param calendar_adapter|null $calendaradapter Managed Calendar adapter.
      */
     public function __construct(
         ?sync_repository $repository = null,
-        ?meeting_lock $lock = null
+        ?meeting_lock $lock = null,
+        ?calendar_adapter $calendaradapter = null
     ) {
         $this->repository = $repository ?? new sync_repository();
         $this->lock = $lock ?? new meeting_lock();
+        $this->calendaradapter = $calendaradapter;
     }
 
     /**
@@ -104,7 +120,11 @@ final class meeting_manager {
                 return;
             }
 
-            if (!in_array($meeting->syncstatus, [sync_state::QUEUED, sync_state::PENDING], true)) {
+            if (!in_array(
+                $meeting->syncstatus,
+                [sync_state::QUEUED, sync_state::SYNCING, sync_state::PENDING],
+                true
+            )) {
                 mtrace(get_string('syncstateskipped', 'mod_googlemeet', (object) [
                     'id' => $googlemeetid,
                     'state' => $meeting->syncstatus,
@@ -140,6 +160,24 @@ final class meeting_manager {
         }
 
         if ($meeting->integrationmode === integration_mode::MANAGED) {
+            $this->process_managed($meeting);
+            return;
+        }
+
+        $this->repository->mark_failed(
+            (int) $meeting->id,
+            self::ERROR_INVALID_MODE,
+            get_string('syncinvalidintegrationmode', 'mod_googlemeet')
+        );
+    }
+
+    /**
+     * Reconciles a managed meeting when an adapter is available.
+     *
+     * @param \stdClass $meeting Activity record in the syncing state.
+     */
+    private function process_managed(\stdClass $meeting): void {
+        if ($this->calendaradapter === null) {
             $this->repository->mark_failed(
                 (int) $meeting->id,
                 self::ERROR_ADAPTER_UNAVAILABLE,
@@ -149,10 +187,32 @@ final class meeting_manager {
             return;
         }
 
-        $this->repository->mark_failed(
-            (int) $meeting->id,
-            self::ERROR_INVALID_MODE,
-            get_string('syncinvalidintegrationmode', 'mod_googlemeet')
-        );
+        try {
+            $result = $this->calendaradapter->synchronise($meeting);
+        } catch (calendar_configuration_exception $e) {
+            $this->repository->mark_failed(
+                (int) $meeting->id,
+                self::ERROR_CALENDAR_CONFIGURATION,
+                get_string('synccalendarconfigurationinvalid', 'mod_googlemeet')
+            );
+            mtrace(get_string('syncmanagedconfigurationfailed', 'mod_googlemeet', $meeting->id));
+            return;
+        } catch (calendar_response_exception $e) {
+            $this->repository->mark_failed(
+                (int) $meeting->id,
+                self::ERROR_CALENDAR_RESPONSE,
+                get_string('synccalendarresponseinvalid', 'mod_googlemeet')
+            );
+            mtrace(get_string('syncmanagedresponsefailed', 'mod_googlemeet', $meeting->id));
+            return;
+        }
+
+        $this->repository->apply_calendar_result((int) $meeting->id, $result);
+        $messagekey = match ($result->status()) {
+            calendar_event_result::PENDING => 'syncmanagedpending',
+            calendar_event_result::SUCCESS => 'syncmanagedready',
+            calendar_event_result::FAILURE => 'syncmanagedfailed',
+        };
+        mtrace(get_string($messagekey, 'mod_googlemeet', $meeting->id));
     }
 }

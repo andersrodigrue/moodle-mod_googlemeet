@@ -68,13 +68,46 @@ The second structural slice adds:
 The task is intentionally not listed in `db/tasks.php`: ad hoc tasks are queued
 programmatically and are not scheduled tasks.
 
-This slice still performs no Google API calls. Manual links settle as `ready`, legacy
-meetings return to `disconnected`, and managed meetings fail safely with
-`adapter_unavailable` until the Calendar adapter is implemented. No form or legacy
-client queues this task yet.
+Manual links settle as `ready` and legacy meetings return to `disconnected`. No form
+or legacy client queues this task yet.
+
+## Managed Calendar adapter
+
+The third structural slice adds an isolated managed Calendar adapter:
+
+- `calendar_client` defines the future OAuth-aware transport without selecting a
+  Google SDK;
+- event IDs are derived deterministically from the site namespace and activity ID
+  using only Calendar-compatible base32hex characters;
+- conference request IDs are deterministic for the same logical event and are
+  reused across transport retries;
+- after Google explicitly reports `failure`, an intentional retry advances the
+  request generation so Google receives a new create request instead of ignoring
+  the previous ID;
+- new events use `conferenceData.createRequest`, the `hangoutsMeet` solution and
+  `conferenceDataVersion=1`;
+- an insert conflict for the controlled event ID falls back to `events.get`, which
+  reconciles a response lost after a successful remote insert;
+- pending conference creation is polled without sending another mutation;
+- transient transport exceptions remain retryable, and a task can resume safely
+  from `syncing` with the same controlled identifiers;
+- existing events are patched, and a ready event does not request a second
+  conference;
+- `pending`, `success` and `failure` responses are validated explicitly before any
+  remote identifiers or join URI are persisted;
+- only an absolute HTTPS video entry point is accepted as the meeting URI;
+- configuration and response failures are persisted with stable, non-secret error
+  codes.
+
+The adapter is available to `meeting_manager` through dependency injection. There is
+deliberately no concrete OAuth/HTTP implementation yet, so normal production
+execution continues to fail safely with `adapter_unavailable` and performs no Google
+request. This lets the request and reconciliation rules be tested independently of
+credentials and network behavior.
 
 ## Next structural slice
 
-The next slice will add the managed Google Calendar adapter behind
-`meeting_manager`, including deterministic event identity, conference request
-idempotency and explicit handling of `pending`, `success` and failure outcomes.
+The next slice will implement the OAuth-aware `calendar_client`, token refresh and
+revocation behavior, safe translation of Google API errors, pending reconciliation
+scheduling, and the first production composition point. Only after that boundary is
+covered will activity create/update flows queue managed synchronization.

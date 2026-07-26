@@ -16,8 +16,88 @@
 
 namespace mod_googlemeet\local;
 
+use mod_googlemeet\api\calendar_adapter;
+use mod_googlemeet\api\calendar_client;
+use mod_googlemeet\api\calendar_event_result;
+use mod_googlemeet\api\calendar_identity;
 use mod_googlemeet\task\synchronise_meeting;
 use PHPUnit\Framework\Attributes\CoversClass;
+
+/**
+ * Calendar transport used by meeting manager tests.
+ *
+ * @package     mod_googlemeet
+ * @category    test
+ * @copyright   2026 Anderson Rodrigues
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+final class meeting_manager_calendar_client implements calendar_client {
+
+    /** @var array<string, mixed> Response returned by every operation. */
+    public array $response = [];
+
+    /** @var string[] Recorded operation names. */
+    public array $operations = [];
+
+    /** @var \RuntimeException|null Transport failure to throw. */
+    public ?\RuntimeException $exception = null;
+
+    /**
+     * Returns the configured insert response.
+     *
+     * @param string $calendarid Calendar ID.
+     * @param array<string, mixed> $event Event resource.
+     * @param array<string, mixed> $parameters Request parameters.
+     * @return array<string, mixed>
+     */
+    public function insert_event(string $calendarid, array $event, array $parameters): array {
+        $this->operations[] = 'insert';
+        if ($this->exception !== null) {
+            throw $this->exception;
+        }
+
+        return $this->response;
+    }
+
+    /**
+     * Returns the configured patch response.
+     *
+     * @param string $calendarid Calendar ID.
+     * @param string $eventid Event ID.
+     * @param array<string, mixed> $event Event patch.
+     * @param array<string, mixed> $parameters Request parameters.
+     * @return array<string, mixed>
+     */
+    public function patch_event(
+        string $calendarid,
+        string $eventid,
+        array $event,
+        array $parameters
+    ): array {
+        $this->operations[] = 'patch';
+        if ($this->exception !== null) {
+            throw $this->exception;
+        }
+
+        return $this->response;
+    }
+
+    /**
+     * Returns the configured get response.
+     *
+     * @param string $calendarid Calendar ID.
+     * @param string $eventid Event ID.
+     * @return array<string, mixed>
+     */
+    public function get_event(string $calendarid, string $eventid): array {
+        $this->operations[] = 'get';
+        if ($this->exception !== null) {
+            throw $this->exception;
+        }
+
+        return $this->response;
+    }
+}
 
 /**
  * Tests for the local synchronization coordinator.
@@ -94,6 +174,252 @@ final class meeting_manager_test extends \advanced_testcase {
         $this->assertSame(sync_state::FAILED, $updated->syncstatus);
         $this->assertSame('adapter_unavailable', $updated->lasterrorcode);
         $this->assertSame(1, (int) $updated->syncattempts);
+    }
+
+    /**
+     * A managed pending response persists controlled identity and state.
+     */
+    public function test_managed_meeting_persists_pending_result(): void {
+        $this->resetAfterTest();
+
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'calendarid' => 'primary',
+            'meetinguri' => null,
+            'timezone' => 'America/Sao_Paulo',
+            'sendupdates' => 'all',
+            'syncstatus' => sync_state::QUEUED,
+        ]);
+        $identity = new calendar_identity('https://moodle.example.test');
+        $eventid = $identity->event_id((int) $meeting->id);
+        $requestid = $identity->request_id((int) $meeting->id, $eventid);
+        $client = new meeting_manager_calendar_client();
+        $client->response = $this->calendar_response(
+            $eventid,
+            $requestid,
+            calendar_event_result::PENDING
+        );
+        $manager = new meeting_manager(
+            null,
+            null,
+            new calendar_adapter($client, $identity)
+        );
+
+        $this->expectOutputString(
+            get_string('syncmanagedpending', 'mod_googlemeet', $meeting->id) . "\n"
+        );
+        $manager->process($meeting->id);
+        $updated = (new sync_repository())->get($meeting->id);
+
+        $this->assertSame(sync_state::PENDING, $updated->syncstatus);
+        $this->assertSame('pending', $updated->conferencestatus);
+        $this->assertSame($eventid, $updated->googleeventid);
+        $this->assertSame($requestid, $updated->requestid);
+        $this->assertSame(['insert'], $client->operations);
+    }
+
+    /**
+     * Polling a managed pending event can complete the conference.
+     */
+    public function test_managed_pending_meeting_becomes_ready(): void {
+        $this->resetAfterTest();
+
+        $requestid = str_repeat('a', 64);
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'calendarid' => 'primary',
+            'googleeventid' => 'persistedevent1',
+            'requestid' => $requestid,
+            'meetinguri' => null,
+            'timezone' => 'America/Sao_Paulo',
+            'sendupdates' => 'all',
+            'syncstatus' => sync_state::PENDING,
+            'conferencestatus' => calendar_event_result::PENDING,
+        ]);
+        $client = new meeting_manager_calendar_client();
+        $client->response = $this->calendar_success_response('persistedevent1', $requestid);
+        $manager = new meeting_manager(
+            null,
+            null,
+            new calendar_adapter(
+                $client,
+                new calendar_identity('https://moodle.example.test')
+            )
+        );
+
+        $this->expectOutputString(
+            get_string('syncmanagedready', 'mod_googlemeet', $meeting->id) . "\n"
+        );
+        $manager->process($meeting->id);
+        $updated = (new sync_repository())->get($meeting->id);
+
+        $this->assertSame(sync_state::READY, $updated->syncstatus);
+        $this->assertSame('success', $updated->conferencestatus);
+        $this->assertSame('https://meet.google.com/abc-defg-hij', $updated->meetinguri);
+        $this->assertSame('abc-defg-hij', $updated->meetingcode);
+        $this->assertSame(['get'], $client->operations);
+    }
+
+    /**
+     * Google conference failure is persisted with a stable safe error.
+     */
+    public function test_managed_conference_failure_is_recorded(): void {
+        $this->resetAfterTest();
+
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'calendarid' => 'primary',
+            'meetinguri' => null,
+            'timezone' => 'America/Sao_Paulo',
+            'sendupdates' => 'none',
+            'syncstatus' => sync_state::QUEUED,
+        ]);
+        $identity = new calendar_identity('https://moodle.example.test');
+        $eventid = $identity->event_id((int) $meeting->id);
+        $requestid = $identity->request_id((int) $meeting->id, $eventid);
+        $client = new meeting_manager_calendar_client();
+        $client->response = $this->calendar_response(
+            $eventid,
+            $requestid,
+            calendar_event_result::FAILURE
+        );
+
+        $this->expectOutputString(
+            get_string('syncmanagedfailed', 'mod_googlemeet', $meeting->id) . "\n"
+        );
+        (new meeting_manager(
+            null,
+            null,
+            new calendar_adapter($client, $identity)
+        ))->process($meeting->id);
+        $updated = (new sync_repository())->get($meeting->id);
+
+        $this->assertSame(sync_state::FAILED, $updated->syncstatus);
+        $this->assertSame('failure', $updated->conferencestatus);
+        $this->assertSame('conference_creation_failed', $updated->lasterrorcode);
+    }
+
+    /**
+     * Invalid managed configuration is converted to a safe local failure.
+     */
+    public function test_managed_configuration_failure_is_recorded(): void {
+        $this->resetAfterTest();
+
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'calendarid' => null,
+            'meetinguri' => null,
+            'timezone' => 'America/Sao_Paulo',
+            'sendupdates' => 'none',
+            'syncstatus' => sync_state::QUEUED,
+        ]);
+        $client = new meeting_manager_calendar_client();
+
+        $this->expectOutputString(
+            get_string('syncmanagedconfigurationfailed', 'mod_googlemeet', $meeting->id) . "\n"
+        );
+        (new meeting_manager(
+            null,
+            null,
+            new calendar_adapter(
+                $client,
+                new calendar_identity('https://moodle.example.test')
+            )
+        ))->process($meeting->id);
+        $updated = (new sync_repository())->get($meeting->id);
+
+        $this->assertSame(sync_state::FAILED, $updated->syncstatus);
+        $this->assertSame('calendar_configuration_invalid', $updated->lasterrorcode);
+        $this->assertSame([], $client->operations);
+    }
+
+    /**
+     * An inconsistent Calendar response is converted to a safe local failure.
+     */
+    public function test_managed_response_failure_is_recorded(): void {
+        $this->resetAfterTest();
+
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'calendarid' => 'primary',
+            'meetinguri' => null,
+            'timezone' => 'America/Sao_Paulo',
+            'sendupdates' => 'none',
+            'syncstatus' => sync_state::QUEUED,
+        ]);
+        $identity = new calendar_identity('https://moodle.example.test');
+        $eventid = $identity->event_id((int) $meeting->id);
+        $requestid = $identity->request_id((int) $meeting->id, $eventid);
+        $client = new meeting_manager_calendar_client();
+        $client->response = $this->calendar_response(
+            'anothercontroll1',
+            $requestid,
+            calendar_event_result::PENDING
+        );
+
+        $this->expectOutputString(
+            get_string('syncmanagedresponsefailed', 'mod_googlemeet', $meeting->id) . "\n"
+        );
+        (new meeting_manager(
+            null,
+            null,
+            new calendar_adapter($client, $identity)
+        ))->process($meeting->id);
+        $updated = (new sync_repository())->get($meeting->id);
+
+        $this->assertSame(sync_state::FAILED, $updated->syncstatus);
+        $this->assertSame('calendar_response_invalid', $updated->lasterrorcode);
+    }
+
+    /**
+     * A transient transport failure can resume from the syncing state.
+     */
+    public function test_managed_transport_retry_resumes_syncing_state(): void {
+        $this->resetAfterTest();
+
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'calendarid' => 'primary',
+            'meetinguri' => null,
+            'timezone' => 'America/Sao_Paulo',
+            'sendupdates' => 'none',
+            'syncstatus' => sync_state::QUEUED,
+        ]);
+        $identity = new calendar_identity('https://moodle.example.test');
+        $client = new meeting_manager_calendar_client();
+        $client->exception = new \RuntimeException('Transient transport failure');
+        $manager = new meeting_manager(
+            null,
+            null,
+            new calendar_adapter($client, $identity)
+        );
+
+        try {
+            $manager->process($meeting->id);
+            $this->fail('The transport failure must leave the task available for retry.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('Transient transport failure', $e->getMessage());
+        }
+        $this->assertSame(sync_state::SYNCING, (new sync_repository())->get($meeting->id)->syncstatus);
+
+        $eventid = $identity->event_id((int) $meeting->id);
+        $requestid = $identity->request_id((int) $meeting->id, $eventid);
+        $client->exception = null;
+        $client->response = $this->calendar_response(
+            $eventid,
+            $requestid,
+            calendar_event_result::PENDING
+        );
+
+        $this->expectOutputString(
+            get_string('syncmanagedpending', 'mod_googlemeet', $meeting->id) . "\n"
+        );
+        $manager->process($meeting->id);
+        $updated = (new sync_repository())->get($meeting->id);
+
+        $this->assertSame(sync_state::PENDING, $updated->syncstatus);
+        $this->assertSame(2, (int) $updated->syncattempts);
+        $this->assertSame(['insert', 'insert'], $client->operations);
     }
 
     /**
@@ -175,5 +501,48 @@ final class meeting_manager_test extends \advanced_testcase {
         $generator = $this->getDataGenerator()->get_plugin_generator('mod_googlemeet');
 
         return $generator->create_instance(['course' => $course->id] + $fields);
+    }
+
+    /**
+     * Builds a Calendar response for one conference status.
+     *
+     * @param string $eventid Event ID.
+     * @param string $requestid Conference request ID.
+     * @param string $status Conference status.
+     * @return array<string, mixed>
+     */
+    private function calendar_response(string $eventid, string $requestid, string $status): array {
+        return [
+            'id' => $eventid,
+            'htmlLink' => 'https://calendar.google.com/event?eid=one',
+            'etag' => '"etag-one"',
+            'conferenceData' => [
+                'createRequest' => [
+                    'requestId' => $requestid,
+                    'status' => [
+                        'statusCode' => $status,
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Builds a successful Google Meet response.
+     *
+     * @param string $eventid Event ID.
+     * @param string $requestid Conference request ID.
+     * @return array<string, mixed>
+     */
+    private function calendar_success_response(string $eventid, string $requestid): array {
+        $response = $this->calendar_response($eventid, $requestid, calendar_event_result::SUCCESS);
+        $response['conferenceData']['conferenceId'] = 'abc-defg-hij';
+        $response['conferenceData']['entryPoints'] = [[
+            'entryPointType' => 'video',
+            'uri' => 'https://meet.google.com/abc-defg-hij',
+            'meetingCode' => 'abc-defg-hij',
+        ]];
+
+        return $response;
     }
 }
