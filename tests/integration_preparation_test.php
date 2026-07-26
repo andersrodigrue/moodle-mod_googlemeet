@@ -120,7 +120,7 @@ final class integration_preparation_test extends \advanced_testcase {
 
         $result = \googlemeet_prepare_integration($data, null, $manager);
 
-        $this->assertSame($user->id, $result->owneruserid);
+        $this->assertSame((int) $user->id, $result->owneruserid);
         $this->assertSame(17, $result->oauthissuerid);
         $this->assertSame('primary', $result->calendarid);
         $this->assertSame(sync_state::DRAFT, $result->syncstatus);
