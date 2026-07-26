@@ -75,7 +75,10 @@ final class sync_status implements \renderable, \templatable {
             sync_state::SYNCING,
             sync_state::PENDING,
             sync_state::CANCELLING,
-        ], true) && empty($this->meeting->lasterrorcode);
+        ], true) && !(
+            $state === sync_state::CANCELLING &&
+            !empty($this->meeting->lasterrorcode)
+        );
         $badgeclass = match ($state) {
             sync_state::READY => 'text-bg-success',
             sync_state::FAILED, sync_state::DISCONNECTED => 'text-bg-danger',

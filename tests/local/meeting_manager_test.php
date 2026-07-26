@@ -165,6 +165,7 @@ final class meeting_manager_test extends \advanced_testcase {
         $meeting = $this->create_meeting([
             'integrationmode' => integration_mode::MANAGED,
             'owneruserid' => $owner->id,
+            'calendarid' => 'primary',
             'googleeventid' => 'event123',
             'syncstatus' => sync_state::READY,
             'meetinguri' => 'https://meet.google.com/abc-defg-hij',
