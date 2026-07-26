@@ -23,7 +23,7 @@ namespace mod_googlemeet\api;
  * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-final class calendar_api_exception extends \runtime_exception {
+final class calendar_api_exception extends \RuntimeException {
 
     /** @var string Stable non-secret error code. */
     private string $errorcode;
