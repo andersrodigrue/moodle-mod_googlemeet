@@ -46,7 +46,7 @@ final class backup_restore_test extends restore_date_testcase {
         global $DB;
 
         $this->resetAfterTest();
-        $course = $this->get_course();
+        $course = $this->getDataGenerator()->create_course(['startdate' => $this->startdate]);
         $this->getDataGenerator()->get_plugin_generator('mod_googlemeet')->create_instance([
             'course' => $course->id,
             'name' => 'Manual backup',
@@ -78,7 +78,7 @@ final class backup_restore_test extends restore_date_testcase {
         global $DB;
 
         $this->resetAfterTest();
-        $course = $this->get_course();
+        $course = $this->getDataGenerator()->create_course(['startdate' => $this->startdate]);
         $owner = $this->getDataGenerator()->create_user();
         $start = $course->startdate + DAYSECS;
         $this->getDataGenerator()->get_plugin_generator('mod_googlemeet')->create_instance([
