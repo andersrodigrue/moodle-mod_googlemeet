@@ -91,7 +91,11 @@ jobs:
 
       - name: PHPUnit
         if: ${{ !cancelled() }}
-        run: moodle-plugin-ci phpunit --fail-on-warning
+        run: >
+          moodle-plugin-ci phpunit
+          --fail-on-warning
+          --display-notices
+          --display-phpunit-deprecations
 
       - name: Mark cancelled jobs as failed
         if: ${{ cancelled() }}
