@@ -71,6 +71,15 @@ final class backup_restore_test extends restore_date_testcase {
         $this->assertSame('https://meet.google.com/abc-defg-hij', $restored->meetinguri);
         $this->assertNull($restored->owneruserid);
         $this->assertNull($restored->googleeventid);
+        $this->assertSame(0, (int) $restored->eventdate);
+        $this->assertSame(0, (int) $restored->starthour);
+        $this->assertSame(0, (int) $restored->startminute);
+        $this->assertSame(0, (int) $restored->endhour);
+        $this->assertSame(0, (int) $restored->endminute);
+        $this->assertSame(0, (int) $restored->addmultiply);
+        $this->assertNull($restored->days);
+        $this->assertNull($restored->period);
+        $this->assertNull($restored->eventenddate);
     }
 
     /**

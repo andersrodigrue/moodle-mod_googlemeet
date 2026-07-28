@@ -29,7 +29,7 @@ $string['at'] = 'às';
 $string['issuerid'] = 'Serviço OAuth';
 $string['issuerid_desc'] = '<a href="https://github.com/ronefel/moodle-mod_googlemeet/wiki/Como-criar-o-ID-do-cliente-e-a-Chave-secreta-do-cliente" target="_blank">Como configurar um Serviço OAuth</a>';
 $string['calendareventname'] = '{$a} está agendado para';
-$string['checkweekdays'] = 'Selecione os dias da semana que se enquadram no intervalo de datas selecionado.';
+$string['checkweekdays'] = 'Selecione pelo menos um dia da semana para a recorrência.';
 $string['date'] = 'Data';
 $string['duration'] = 'Duração';
 $string['earlierto'] = 'A data do evento não pode ser anterior à data de início do curso ({$a}).';
@@ -64,10 +64,13 @@ $string['googlemeet:syncgoogledrive'] = 'Descobrir gravações do Google Meet';
 $string['googlemeet:view'] = 'Ver Google Meet™ para Moodle';
 $string['hide'] = 'Ocultar';
 $string['invalidactivitycontext'] = 'O item solicitado não pertence a esta atividade Google Meet.';
-$string['invalideventenddate'] = 'Esta data não pode ser anterior à "Data do evento"';
+$string['invalideventenddate'] = 'O término da recorrência não pode ser anterior ao início da reunião.';
 $string['invalideventendtime'] = 'O horário de término deve ser maior que o horário de início';
 $string['invalidissuerid'] = 'O serviço OAuth selecionado nas configurações do "Google Meet™ para Moodle" não é suportado pelo Google';
 $string['invalidintegrationmode'] = 'Selecione um modo de integração de reunião compatível.';
+$string['invalidmeetingtimezone'] = 'Selecione um fuso horário IANA válido.';
+$string['invalidrecurrenceinterval'] = 'O intervalo da recorrência deve ficar entre 1 e 36 semanas.';
+$string['invalidschedule'] = 'A agenda da reunião é inválida. Revise as datas, o fuso horário e a recorrência.';
 $string['invalidsyncaction'] = 'Esta ação de sincronização não está disponível no estado atual da reunião.';
 $string['invalidstoredurl'] = 'Não é possível exibir este recurso, a URL do Google Meet é inválida.';
 $string['integration'] = 'Integração da reunião';
@@ -105,8 +108,16 @@ $string['managedowneronly'] = 'Somente o professor proprietário desta reunião 
     . 'com o Google Agenda.';
 $string['managedroomurldesc'] = 'Reuniões gerenciadas recebem o link do Meet após a sincronização em segundo plano. '
     . 'Informe um link apenas no modo manual.';
+$string['meetingend'] = 'Término da reunião';
+$string['meetingend_help'] = 'Selecione a data e o horário exatos de término. O término deve ser posterior ao início.';
 $string['meetinglinknotready'] = 'O link do Google Meet ainda não está disponível. A atividade será atualizada após a '
     . 'sincronização.';
+$string['meetingschedule'] = 'Agenda da reunião';
+$string['meetingstart'] = 'Início da reunião';
+$string['meetingstart_help'] = 'Selecione a data e o horário exatos de início no fuso horário da reunião.';
+$string['meetingtimezone'] = 'Fuso horário da reunião';
+$string['meetingtimezone_help'] = 'As datas são armazenadas como instantes absolutos. Nas recorrências semanais, o '
+    . 'horário local selecionado é preservado neste fuso mesmo quando há mudança de horário de verão.';
 $string['messageprovider:notification'] = 'Lembrete de início do evento do Google Meet';
 $string['minutesbefore'] = 'Minutos antes';
 $string['minutesbefore_help'] = 'Número de minutos antes do início do evento quando a notificação deve ser enviada.';
@@ -205,11 +216,14 @@ $string['recordings'] = 'Gravações';
 $string['recordingswiththename'] = 'Gravações com o nome:';
 $string['reconcilependingresult'] = 'A reconciliação do Google Agenda encontrou {$a->found} reunião(ões) e enfileirou {$a->queued}.';
 $string['reconcilependingtask'] = 'Reconciliar conferências pendentes do Google Meet';
-$string['recurrenceeventdate'] = 'Recorrência da data do evento';
-$string['recurrenceeventdate_help'] = 'Esta função possibilita a criação de várias recorrências da data do evento.
-<br>* <strong>Repetir</strong>: Selecione os dias da semana em que sua classe se reunirá (por exemplo, segunda-feira / quarta-feira / sexta-feira).
-<br>* <strong>Repetir a cada</strong>: Isso permite uma configuração de frequência. Se sua classe se reunirá todas as semanas, selecione 1; se reunirá a cada duas semanas, selecione 2; a cada 3 semanas, selecione 3, e assim por diante.
-<br>* <strong>Repetir até</strong>: Selecione o último dia de reunião (o último dia que você deseja levar a recorrência da data do evento).';
+$string['recurrenceeventdate'] = 'Recorrência da reunião';
+$string['recurrenceeventdate_help'] = 'Ative a recorrência semanal, selecione um ou mais dias, escolha um intervalo de '
+    . '1 a 36 semanas e defina o limite inclusivo da recorrência. A série pode abranger no máximo um ano.';
+$string['recurrencecompatibilitynotice'] = 'Esta agenda importada contém datas individuais ou exceções de recorrência '
+    . 'que o editor semanal não consegue representar com segurança. A agenda canônica foi preservada como somente '
+    . 'leitura; as demais configurações da atividade ainda podem ser editadas.';
+$string['recurrenceenabled'] = 'Repetir esta reunião semanalmente';
+$string['recurrenceinterval'] = 'Repetir a cada (semanas)';
 $string['repeatasfollows'] = 'Repita a data do evento acima da seguinte forma';
 $string['repeatevery'] = 'Repetir a cada';
 $string['repeaton'] = 'Repetir';
@@ -285,7 +299,7 @@ $string['syncerrormessage'] = 'Mensagem segura do erro';
 $string['synclastattempt'] = 'Última tentativa: {$a}';
 $string['synchronisetask'] = 'Sincronizar atividade do Google Meet';
 $string['thereisnorecordingtoshow'] = 'Não há gravação para mostrar.';
-$string['timeahead'] = 'Não é possível criar várias recorrências da data do evento que excedam um ano, ajuste as datas de início e término.';
+$string['timeahead'] = 'Uma reunião recorrente não pode exceder um ano. Ajuste o início ou o término da recorrência.';
 $string['timedate'] = '%d/%m/%Y %H:%M';
 $string['to'] = 'até';
 $string['today'] = 'Hoje';

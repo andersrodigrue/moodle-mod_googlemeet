@@ -84,20 +84,12 @@ function googlemeet_add_instance($googlemeet, $mform = null) {
     );
     $googlemeet = googlemeet_prepare_integration($googlemeet);
 
-    if (isset($googlemeet->days)) {
-        $googlemeet->days = json_encode($googlemeet->days);
-    }
-
     $googlemeet->meetinguri = $googlemeet->url;
     $googlemeet->timecreated = time();
     $googlemeet->timemodified = $googlemeet->timecreated;
 
     if (!$googlemeet->id = $DB->insert_record('googlemeet', $googlemeet)) {
         return false;
-    }
-
-    if (isset($googlemeet->days)) {
-        $googlemeet->days = json_decode($googlemeet->days, true);
     }
 
     (new schedule_manager())->synchronise($googlemeet);
@@ -128,29 +120,17 @@ function googlemeet_update_instance($googlemeet, $mform = null) {
         $googlemeet->integrationmode = $existing->integrationmode;
     }
 
-    if (!isset($googlemeet->addmultiply)) {
-        $googlemeet->addmultiply = 0;
-        $googlemeet->days = null;
-        $googlemeet->eventenddate = $googlemeet->eventdate;
-        $googlemeet->period = null;
-    }
-
     $googlemeet = (new meeting_form_data())->normalize(
         $googlemeet,
-        get_user_timezone($USER->timezone)
+        get_user_timezone($USER->timezone),
+        $existing
     );
     $googlemeet = googlemeet_prepare_integration($googlemeet, $existing);
 
-    if (isset($googlemeet->days)) {
-        $googlemeet->days = json_encode($googlemeet->days);
-    }
     $googlemeet->timemodified = time();
 
     $googlemeetupdated = $DB->update_record('googlemeet', $googlemeet);
 
-    if (isset($googlemeet->days)) {
-        $googlemeet->days = json_decode($googlemeet->days, true);
-    }
     (new schedule_manager())->synchronise($googlemeet);
     if ($googlemeet->integrationmode === integration_mode::MANAGED) {
         (new meeting_manager())->queue((int) $googlemeet->id, (int) $googlemeet->owneruserid);

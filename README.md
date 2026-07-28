@@ -88,6 +88,13 @@ blindly recreated, preserving reminder receipts across ordinary edits. Reminder
 recipients are selected through a dedicated capability rather than a hard-coded
 role ID.
 
+The activity editor writes that canonical schedule directly with Moodle date/time,
+timezone and weekly recurrence controls. Deprecated date, clock and recurrence
+columns are no longer submitted by new forms or emitted by new backups; they remain
+temporarily available only so older installations and backups can be converted.
+Imported recurrence exceptions that cannot be represented by the weekly editor are
+preserved read-only rather than silently simplified.
+
 ## Security
 
 If you discover any security related issues, please email [ronefel@hotmail.com](mailto:ronefel@hotmail.com) instead of using the issue tracker.

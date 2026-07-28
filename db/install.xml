@@ -15,15 +15,15 @@
         <FIELD NAME="intro" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Activity description."/>
         <FIELD NAME="introformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The format of the intro field."/>
         <FIELD NAME="lastsync" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The last time this activity was synced to Google Drive."/>
-        <FIELD NAME="eventdate" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The date of the event."/>
-        <FIELD NAME="starthour" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The start hour of the event."/>
-        <FIELD NAME="startminute" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The start minute of the event."/>
-        <FIELD NAME="endhour" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The end hour of the event."/>
-        <FIELD NAME="endminute" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The end minute of the event."/>
-        <FIELD NAME="addmultiply" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Whether to add multiple events."/>
-        <FIELD NAME="days" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Days of the week."/>
-        <FIELD NAME="period" TYPE="int" LENGTH="4" NOTNULL="false" SEQUENCE="false" COMMENT="The event period."/>
-        <FIELD NAME="eventenddate" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The event end date."/>
+        <FIELD NAME="eventdate" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated date retained for old backup compatibility."/>
+        <FIELD NAME="starthour" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated start hour retained for old backup compatibility."/>
+        <FIELD NAME="startminute" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated start minute retained for old backup compatibility."/>
+        <FIELD NAME="endhour" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated end hour retained for old backup compatibility."/>
+        <FIELD NAME="endminute" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated end minute retained for old backup compatibility."/>
+        <FIELD NAME="addmultiply" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated recurrence flag retained for old backup compatibility."/>
+        <FIELD NAME="days" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Deprecated recurrence weekdays retained for old backup compatibility."/>
+        <FIELD NAME="period" TYPE="int" LENGTH="4" NOTNULL="false" SEQUENCE="false" COMMENT="Deprecated recurrence interval retained for old backup compatibility."/>
+        <FIELD NAME="eventenddate" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Deprecated recurrence end retained for old backup compatibility."/>
         <FIELD NAME="notify" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Whether to send notification to the student."/>
         <FIELD NAME="minutesbefore" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="When the notification should be send."/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the instance was last modified."/>

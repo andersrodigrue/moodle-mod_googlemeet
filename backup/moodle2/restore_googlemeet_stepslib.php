@@ -93,7 +93,7 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
             $days = json_decode($data->days, true);
             $data->days = is_array($days) ? $days : [];
         }
-        $normalized = (new \mod_googlemeet\local\meeting_form_data())->normalize($data, $timezone);
+        $normalized = (new \mod_googlemeet\local\meeting_form_data())->normalize_legacy($data, $timezone);
         $data->originalname = $normalized->originalname;
         $data->timestart = $normalized->timestart;
         $data->timeend = $normalized->timeend;

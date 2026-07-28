@@ -17,11 +17,11 @@
 namespace mod_googlemeet\local;
 
 /**
- * Normalizes legacy activity form fields for the managed Calendar boundary.
+ * Maps the activity form to the canonical schedule.
  *
- * The browser submits the existing date selector and hour/minute controls.
- * This value mapper converts them to absolute timestamps and one canonical
- * recurrence rule before any asynchronous task reads the activity.
+ * New forms submit absolute start/end timestamps, an IANA timezone and
+ * recurrence controls. The legacy mapper remains intentionally available for
+ * old backups and records which have not acquired canonical timestamps yet.
  *
  * @package     mod_googlemeet
  * @copyright   2026 Anderson Rodrigues
@@ -30,7 +30,7 @@ namespace mod_googlemeet\local;
 final class meeting_form_data {
 
     /** @var array<string, string> Legacy form weekday keys mapped to RFC 5545 values. */
-    private const WEEKDAYS = [
+    private const LEGACY_WEEKDAYS = [
         'Sun' => 'SU',
         'Mon' => 'MO',
         'Tue' => 'TU',
@@ -40,56 +40,270 @@ final class meeting_form_data {
         'Sat' => 'SA',
     ];
 
+    /** @var array<string, int> RFC 5545 weekdays mapped to ISO-8601 weekday numbers. */
+    private const WEEKDAYS = [
+        'MO' => 1,
+        'TU' => 2,
+        'WE' => 3,
+        'TH' => 4,
+        'FR' => 5,
+        'SA' => 6,
+        'SU' => 7,
+    ];
+
+    /** @var string[] Fields retained in the database only for legacy compatibility. */
+    private const LEGACY_FIELDS = [
+        'eventdate',
+        'starthour',
+        'startminute',
+        'endhour',
+        'endminute',
+        'addmultiply',
+        'days',
+        'period',
+        'eventenddate',
+    ];
+
     /**
-     * Adds normalized Calendar fields to a copy of submitted form data.
+     * Adds canonical Calendar fields to a copy of submitted form data.
      *
      * @param \stdClass $data Submitted activity data.
-     * @param string $timezone IANA timezone selected for the meeting owner.
-     * @return \stdClass Normalized copy.
+     * @param string $defaulttimezone Fallback IANA timezone for old data.
+     * @param \stdClass|null $existing Existing activity during update.
+     * @return \stdClass Normalized copy without submitted legacy schedule fields.
      */
-    public function normalize(\stdClass $data, string $timezone): \stdClass {
+    public function normalize(
+        \stdClass $data,
+        string $defaulttimezone,
+        ?\stdClass $existing = null
+    ): \stdClass {
         $normalized = clone $data;
-        $timezoneobject = $this->timezone($timezone);
+
+        // Imported enumerated series cannot be represented by the weekly editor.
+        // Preserve their complete schedule until a dedicated exception editor is
+        // available instead of silently dropping RDATE, EXDATE or COUNT values.
+        if (
+            $existing !== null
+            && trim((string) ($existing->recurrence ?? '')) !== ''
+            && !$this->is_recurrence_editable((string) $existing->recurrence)
+        ) {
+            $normalized->timestart = (int) $existing->timestart;
+            $normalized->timeend = (int) $existing->timeend;
+            $normalized->timezone = $this->timezone(
+                (string) ($existing->timezone ?? $defaulttimezone)
+            )->getName();
+            $normalized->recurrence = (string) $existing->recurrence;
+        } else {
+            $timezone = $this->timezone((string) ($data->timezone ?? $defaulttimezone));
+            $normalized->timestart = (int) ($data->timestart ?? 0);
+            $normalized->timeend = (int) ($data->timeend ?? 0);
+            $normalized->timezone = $timezone->getName();
+            $this->validate_duration($normalized->timestart, $normalized->timeend);
+            $normalized->recurrence = $this->recurrence_from_controls(
+                $data,
+                $normalized->timestart,
+                $timezone
+            );
+        }
+
+        return $this->finalize($normalized, $data);
+    }
+
+    /**
+     * Converts deprecated scheduling fields to the canonical representation.
+     *
+     * This method is deliberately separate from current form normalization so
+     * forged legacy fields cannot become an alternate persistence path.
+     *
+     * @param \stdClass $data Legacy activity or backup data.
+     * @param string $defaulttimezone Fallback IANA timezone.
+     * @return \stdClass Canonical copy without deprecated schedule fields.
+     */
+    public function normalize_legacy(\stdClass $data, string $defaulttimezone): \stdClass {
+        $normalized = clone $data;
+        $this->normalize_legacy_schedule($normalized, $data, $defaulttimezone);
+
+        return $this->finalize($normalized, $data);
+    }
+
+    /**
+     * Converts stored canonical values to weekly form controls.
+     *
+     * Legacy fields are consulted only when canonical timestamps are missing.
+     * Unsupported imported recurrence remains marked as locked and is preserved
+     * server-side by {@see self::normalize()}.
+     *
+     * @param array $defaultvalues Activity defaults supplied by Moodle.
+     * @param string $defaulttimezone Fallback IANA timezone.
+     * @return array Prepared defaults.
+     */
+    public function prepare_form_defaults(array $defaultvalues, string $defaulttimezone): array {
+        $data = (object) $defaultvalues;
+        if (!$this->has_valid_canonical_schedule($data) && (int) ($data->eventdate ?? 0) > 0) {
+            $legacy = $this->normalize_legacy($data, $defaulttimezone);
+            $data->timestart = $legacy->timestart;
+            $data->timeend = $legacy->timeend;
+            $data->timezone = $legacy->timezone;
+            $data->recurrence = $legacy->recurrence;
+        }
+
+        $timezone = $this->timezone((string) ($data->timezone ?? $defaulttimezone));
+        $timestart = (int) ($data->timestart ?? 0);
+        $defaultvalues['timestart'] = $timestart;
+        $defaultvalues['timeend'] = (int) ($data->timeend ?? 0);
+        $defaultvalues['timezone'] = $timezone->getName();
+        $defaultvalues['recurrenceenabled'] = 0;
+        $defaultvalues['recurrenceinterval'] = 1;
+        $defaultvalues['recurrenceweekdays'] = $timestart > 0
+            ? [$this->weekday($timestart, $timezone)]
+            : [];
+        $defaultvalues['recurrenceuntil'] = $timestart > 0
+            ? $this->default_recurrence_until($timestart, $timezone)
+            : 0;
+        $defaultvalues['recurrencecompatibilitylocked'] = 0;
+
+        $recurrence = trim((string) ($data->recurrence ?? ''));
+        if ($recurrence === '') {
+            return $defaultvalues;
+        }
+
+        $parsed = $this->parse_editable_recurrence($recurrence);
+        if ($parsed === null) {
+            $defaultvalues['recurrenceenabled'] = 1;
+            $defaultvalues['recurrencecompatibilitylocked'] = 1;
+            return $defaultvalues;
+        }
+
+        $defaultvalues['recurrenceenabled'] = 1;
+        $defaultvalues['recurrenceinterval'] = $parsed['interval'];
+        $defaultvalues['recurrenceweekdays'] = $parsed['weekdays'];
+        $defaultvalues['recurrenceuntil'] = $parsed['until'];
+
+        return $defaultvalues;
+    }
+
+    /**
+     * Whether a recurrence can be edited without losing information.
+     *
+     * @param string|null $recurrence Persisted canonical recurrence.
+     * @return bool
+     */
+    public function is_recurrence_editable(?string $recurrence): bool {
+        $recurrence = trim((string) $recurrence);
+        return $recurrence === '' || $this->parse_editable_recurrence($recurrence) !== null;
+    }
+
+    /**
+     * Normalizes the deprecated date, clock and recurrence fields.
+     *
+     * @param \stdClass $normalized Record being normalized.
+     * @param \stdClass $data Legacy source data.
+     * @param string $defaulttimezone Fallback IANA timezone.
+     */
+    private function normalize_legacy_schedule(
+        \stdClass $normalized,
+        \stdClass $data,
+        string $defaulttimezone
+    ): void {
+        $timezone = $this->timezone($defaulttimezone);
         $eventdate = (int) ($data->eventdate ?? 0);
         if ($eventdate <= 0) {
             throw new \invalid_parameter_exception('A positive meeting date is required.');
         }
 
-        $start = $this->timestamp(
+        $normalized->timestart = $this->legacy_timestamp(
             $eventdate,
             (int) ($data->starthour ?? -1),
             (int) ($data->startminute ?? -1),
-            $timezoneobject
+            $timezone
         );
-        $end = $this->timestamp(
+        $normalized->timeend = $this->legacy_timestamp(
             $eventdate,
             (int) ($data->endhour ?? -1),
             (int) ($data->endminute ?? -1),
-            $timezoneobject
+            $timezone
         );
-        if ($end <= $start) {
-            throw new \invalid_parameter_exception('The meeting end time must be after its start time.');
-        }
+        $this->validate_duration($normalized->timestart, $normalized->timeend);
+        $normalized->timezone = $timezone->getName();
+        $normalized->recurrence = $this->recurrence_from_legacy_fields($data, $timezone);
+    }
 
-        $normalized->originalname = trim((string) ($data->name ?? ''));
-        $normalized->timestart = $start;
-        $normalized->timeend = $end;
-        $normalized->timezone = $timezoneobject->getName();
+    /**
+     * Applies shared server-owned fields and strips deprecated input.
+     *
+     * @param \stdClass $normalized Normalized data.
+     * @param \stdClass $source Submitted source data.
+     * @return \stdClass Final normalized copy.
+     */
+    private function finalize(\stdClass $normalized, \stdClass $source): \stdClass {
+        $normalized->originalname = trim((string) ($source->name ?? ''));
         $normalized->calendarid = 'primary';
         $normalized->sendupdates = 'none';
-        $normalized->recurrence = $this->recurrence($data, $timezoneobject);
+        foreach (self::LEGACY_FIELDS as $field) {
+            unset($normalized->{$field});
+        }
 
         return $normalized;
     }
 
     /**
-     * Builds one canonical weekly recurrence rule.
+     * Whether stored timestamps form a valid canonical schedule.
      *
-     * @param \stdClass $data Submitted activity data.
+     * @param \stdClass $data Stored activity data.
+     * @return bool
+     */
+    private function has_valid_canonical_schedule(\stdClass $data): bool {
+        return (int) ($data->timestart ?? 0) > 0
+            && (int) ($data->timeend ?? 0) > (int) $data->timestart;
+    }
+
+    /**
+     * Builds the canonical rule from current form controls.
+     *
+     * @param \stdClass $data Submitted form data.
+     * @param int $timestart Canonical meeting start.
      * @param \DateTimeZone $timezone Meeting timezone.
      * @return string|null
      */
-    private function recurrence(\stdClass $data, \DateTimeZone $timezone): ?string {
+    private function recurrence_from_controls(
+        \stdClass $data,
+        int $timestart,
+        \DateTimeZone $timezone
+    ): ?string {
+        if (empty($data->recurrenceenabled)) {
+            return null;
+        }
+
+        $interval = (int) ($data->recurrenceinterval ?? 0);
+        if ($interval < 1 || $interval > 36) {
+            throw new \invalid_parameter_exception('The recurrence interval must be between 1 and 36 weeks.');
+        }
+
+        $weekdays = $this->normalize_weekdays((array) ($data->recurrenceweekdays ?? []));
+        if ($weekdays === []) {
+            throw new \invalid_parameter_exception('At least one recurrence weekday is required.');
+        }
+
+        $until = (int) ($data->recurrenceuntil ?? 0);
+        $this->validate_recurrence_until($timestart, $until, $timezone);
+
+        return 'RRULE:FREQ=WEEKLY;INTERVAL=' . $interval
+            . ';UNTIL=' . gmdate('Ymd\THis\Z', $until)
+            . ';BYDAY=' . implode(',', $weekdays)
+            . ';WKST=MO';
+    }
+
+    /**
+     * Builds a canonical weekly rule from deprecated fields.
+     *
+     * @param \stdClass $data Legacy form data.
+     * @param \DateTimeZone $timezone Meeting timezone.
+     * @return string|null
+     */
+    private function recurrence_from_legacy_fields(
+        \stdClass $data,
+        \DateTimeZone $timezone
+    ): ?string {
         if (empty($data->addmultiply)) {
             return null;
         }
@@ -101,7 +315,7 @@ final class meeting_form_data {
 
         $submitted = (array) ($data->days ?? []);
         $weekdays = [];
-        foreach (self::WEEKDAYS as $formkey => $rulevalue) {
+        foreach (self::LEGACY_WEEKDAYS as $formkey => $rulevalue) {
             if (!empty($submitted[$formkey])) {
                 $weekdays[] = $rulevalue;
             }
@@ -114,10 +328,17 @@ final class meeting_form_data {
         if ($eventenddate < (int) $data->eventdate) {
             throw new \invalid_parameter_exception('The recurrence end date cannot precede the meeting date.');
         }
-        if ($eventenddate - (int) $data->eventdate > YEARSECS) {
-            throw new \invalid_parameter_exception('The recurrence cannot exceed one year.');
-        }
-        $until = $this->timestamp($eventenddate, 23, 59, $timezone, 59);
+        $until = $this->legacy_timestamp($eventenddate, 23, 59, $timezone, 59);
+        $this->validate_recurrence_until(
+            $this->legacy_timestamp(
+                (int) $data->eventdate,
+                (int) ($data->starthour ?? -1),
+                (int) ($data->startminute ?? -1),
+                $timezone
+            ),
+            $until,
+            $timezone
+        );
 
         return 'RRULE:FREQ=WEEKLY;INTERVAL=' . $interval
             . ';UNTIL=' . gmdate('Ymd\THis\Z', $until)
@@ -125,7 +346,145 @@ final class meeting_form_data {
     }
 
     /**
-     * Converts the selected local calendar day and clock fields to a timestamp.
+     * Parses the weekly subset represented by the form.
+     *
+     * @param string $recurrence Canonical recurrence.
+     * @return array{interval: int, weekdays: string[], until: int}|null
+     */
+    private function parse_editable_recurrence(string $recurrence): ?array {
+        if (str_contains($recurrence, "\n") || str_contains($recurrence, "\r")) {
+            return null;
+        }
+        if (!str_starts_with($recurrence, 'RRULE:')) {
+            return null;
+        }
+
+        $fields = [];
+        foreach (explode(';', substr($recurrence, 6)) as $part) {
+            [$name, $value] = array_pad(explode('=', $part, 2), 2, null);
+            if ($name === '' || $value === null || isset($fields[$name])) {
+                return null;
+            }
+            $fields[$name] = $value;
+        }
+
+        $allowed = ['FREQ', 'INTERVAL', 'UNTIL', 'BYDAY', 'WKST'];
+        if (array_diff(array_keys($fields), $allowed) !== []) {
+            return null;
+        }
+        if (
+            ($fields['FREQ'] ?? null) !== 'WEEKLY'
+            || !isset($fields['UNTIL'], $fields['BYDAY'])
+            || (isset($fields['WKST']) && $fields['WKST'] !== 'MO')
+        ) {
+            return null;
+        }
+
+        $intervalvalue = $fields['INTERVAL'] ?? '1';
+        if (!ctype_digit($intervalvalue)) {
+            return null;
+        }
+        $interval = (int) $intervalvalue;
+        if ($interval < 1 || $interval > 36) {
+            return null;
+        }
+
+        try {
+            $weekdays = $this->normalize_weekdays(explode(',', $fields['BYDAY']));
+        } catch (\invalid_parameter_exception) {
+            return null;
+        }
+        if ($weekdays === []) {
+            return null;
+        }
+
+        $until = \DateTimeImmutable::createFromFormat(
+            '!Ymd\THis\Z',
+            $fields['UNTIL'],
+            new \DateTimeZone('UTC')
+        );
+        $errors = \DateTimeImmutable::getLastErrors();
+        if (
+            $until === false
+            || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
+            || $until->format('Ymd\THis\Z') !== $fields['UNTIL']
+        ) {
+            return null;
+        }
+
+        return [
+            'interval' => $interval,
+            'weekdays' => $weekdays,
+            'until' => $until->getTimestamp(),
+        ];
+    }
+
+    /**
+     * Validates duration.
+     *
+     * @param int $timestart Meeting start.
+     * @param int $timeend Meeting end.
+     */
+    private function validate_duration(int $timestart, int $timeend): void {
+        if ($timestart <= 0) {
+            throw new \invalid_parameter_exception('A positive meeting start is required.');
+        }
+        if ($timeend <= $timestart) {
+            throw new \invalid_parameter_exception('The meeting end time must be after its start time.');
+        }
+    }
+
+    /**
+     * Validates a bounded recurrence end.
+     *
+     * @param int $timestart Meeting start.
+     * @param int $until Inclusive recurrence boundary.
+     * @param \DateTimeZone $timezone Meeting timezone.
+     */
+    private function validate_recurrence_until(
+        int $timestart,
+        int $until,
+        \DateTimeZone $timezone
+    ): void {
+        if ($until < $timestart) {
+            throw new \invalid_parameter_exception('The recurrence end cannot precede the meeting start.');
+        }
+
+        $startday = (new \DateTimeImmutable('@' . $timestart))
+            ->setTimezone($timezone)
+            ->setTime(0, 0);
+        $untilday = (new \DateTimeImmutable('@' . $until))
+            ->setTimezone($timezone)
+            ->setTime(0, 0);
+        if ($untilday > $startday->modify('+1 year')) {
+            throw new \invalid_parameter_exception('The recurrence cannot exceed one year.');
+        }
+    }
+
+    /**
+     * Normalizes RFC weekday values in calendar order.
+     *
+     * @param array $submitted Submitted weekday values.
+     * @return string[]
+     */
+    private function normalize_weekdays(array $submitted): array {
+        $selected = [];
+        foreach ($submitted as $weekday) {
+            $weekday = strtoupper((string) $weekday);
+            if (!isset(self::WEEKDAYS[$weekday])) {
+                throw new \invalid_parameter_exception('The recurrence contains an invalid weekday.');
+            }
+            $selected[$weekday] = true;
+        }
+
+        return array_values(array_filter(
+            array_keys(self::WEEKDAYS),
+            static fn(string $weekday): bool => isset($selected[$weekday])
+        ));
+    }
+
+    /**
+     * Converts a deprecated local date and clock to one absolute timestamp.
      *
      * @param int $date Selected date timestamp.
      * @param int $hour Hour from 0 to 23.
@@ -134,7 +493,7 @@ final class meeting_form_data {
      * @param int $second Second from 0 to 59.
      * @return int
      */
-    private function timestamp(
+    private function legacy_timestamp(
         int $date,
         int $hour,
         int $minute,
@@ -145,17 +504,46 @@ final class meeting_form_data {
             throw new \invalid_parameter_exception('The meeting clock fields are invalid.');
         }
 
-        $parts = usergetdate($date, $timezone->getName());
+        $localdate = (new \DateTimeImmutable('@' . $date))->setTimezone($timezone);
+        $timestamp = $localdate->setTime($hour, $minute, $second);
+        if (
+            (int) $timestamp->format('G') !== $hour
+            || (int) $timestamp->format('i') !== $minute
+            || (int) $timestamp->format('s') !== $second
+        ) {
+            throw new \invalid_parameter_exception('The meeting time does not exist in the selected timezone.');
+        }
 
-        return make_timestamp(
-            (int) $parts['year'],
-            (int) $parts['mon'],
-            (int) $parts['mday'],
-            $hour,
-            $minute,
-            $second,
-            $timezone->getName()
-        );
+        return $timestamp->getTimestamp();
+    }
+
+    /**
+     * Returns the RFC weekday for a timestamp.
+     *
+     * @param int $timestamp Timestamp.
+     * @param \DateTimeZone $timezone Meeting timezone.
+     * @return string
+     */
+    private function weekday(int $timestamp, \DateTimeZone $timezone): string {
+        $number = (int) (new \DateTimeImmutable('@' . $timestamp))
+            ->setTimezone($timezone)
+            ->format('N');
+
+        return (string) array_search($number, self::WEEKDAYS, true);
+    }
+
+    /**
+     * Provides a four-week default boundary in local wall-clock time.
+     *
+     * @param int $timestart Meeting start.
+     * @param \DateTimeZone $timezone Meeting timezone.
+     * @return int
+     */
+    private function default_recurrence_until(int $timestart, \DateTimeZone $timezone): int {
+        return (new \DateTimeImmutable('@' . $timestart))
+            ->setTimezone($timezone)
+            ->modify('+4 weeks')
+            ->getTimestamp();
     }
 
     /**

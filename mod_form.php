@@ -26,6 +26,7 @@ defined('MOODLE_INTERNAL') || die();
 
 use mod_googlemeet\api\calendar_authorization_exception;
 use mod_googlemeet\local\integration_mode;
+use mod_googlemeet\local\meeting_form_data;
 use mod_googlemeet\local\oauth_manager;
 
 require_once($CFG->dirroot . '/course/moodleform_mod.php');
@@ -39,14 +40,11 @@ require_once($CFG->dirroot . '/mod/googlemeet/locallib.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class mod_googlemeet_mod_form extends moodleform_mod {
-    /** @var array options to be used with date_time_selector fields in the quiz. */
-    public static $datefieldoptions = array('optional' => true);
-
     /**
      * Defines forms elements
      */
     public function definition() {
-        global $CFG, $OUTPUT, $USER;
+        global $CFG, $COURSE, $OUTPUT, $USER;
 
         $config = get_config('googlemeet');
         $mform = $this->_form;
@@ -134,85 +132,120 @@ class mod_googlemeet_mod_form extends moodleform_mod {
         $mform->addElement('static', 'managedoauthstatus', get_string('managedoauth', 'googlemeet'), $oauthstatus);
         $mform->hideIf('managedoauthstatus', 'integrationmode', 'neq', integration_mode::MANAGED);
 
-        $hours = [];
-        $minutes = [];
-        for ($i = 0; $i <= 23; $i++) {
-            $hours[$i] = sprintf("%02d", $i);
-        }
-        for ($i = 0; $i < 60; $i++) {
-            $minutes[$i] = sprintf("%02d", $i);
-        }
-
-        $eventtime = [
-            $mform->createElement('date_selector', 'eventdate', ''),
-            $mform->createElement('html', '<div style="width: 100%;"></div>'),
-            $mform->createElement('html', '<div class="items-center">' . get_string('from', 'googlemeet') . '</div>'),
-            $mform->createElement('select', 'starthour', get_string('hour', 'form'), $hours, false, true),
-            $mform->createElement('select', 'startminute', get_string('minute', 'form'), $minutes, false, true),
-            $mform->createElement('html', '<div class="items-center">' . get_string('to', 'googlemeet') . '</div>'),
-            $mform->createElement('select', 'endhour', get_string('hour', 'form'), $hours, false, true),
-            $mform->createElement('select', 'endminute', get_string('minute', 'form'), $minutes, false, true),
-            $mform->createElement('html',
-                '<div id="id_googlemeet_eventtime_error" class="form-control-feedback invalid-feedback"></div>'
-            ),
+        $mform->addElement('header', 'headerschedule', get_string('meetingschedule', 'googlemeet'));
+        $scheduletimezone = $this->schedule_timezone();
+        $dateoptions = [
+            'optional' => false,
+            'step' => 5,
+            'timezone' => $scheduletimezone,
         ];
-        $mform->addGroup($eventtime, 'eventtime', get_string('eventdate', 'googlemeet'), [''], false);
+        $now = \core\di::get(\core\clock::class)->time();
+        $defaultstart = max((int) $COURSE->startdate, $now);
+        $defaultstart = (int) (ceil($defaultstart / (5 * MINSECS)) * (5 * MINSECS));
 
-        // For multiple dates.
-        $mform->addElement('header', 'headeraddmultipleeventdates', get_string('recurrenceeventdate', 'googlemeet'));
-        if (!empty($config->multieventdateexpanded) || !empty($this->current->addmultiply)) {
-            $mform->setExpanded('headeraddmultipleeventdates');
-        }
-
-        $mform->addElement('checkbox', 'addmultiply', '', get_string('repeatasfollows', 'googlemeet'));
-        $mform->addHelpButton('addmultiply', 'recurrenceeventdate', 'googlemeet');
-
-        $days = [
-            $mform->createElement('checkbox', 'days[Mon]', '', get_string('monday', 'calendar')),
-            $mform->createElement('checkbox', 'days[Tue]', '', get_string('tuesday', 'calendar')),
-            $mform->createElement('checkbox', 'days[Wed]', '', get_string('wednesday', 'calendar')),
-            $mform->createElement('checkbox', 'days[Thu]', '', get_string('thursday', 'calendar')),
-            $mform->createElement('checkbox', 'days[Fri]', '', get_string('friday', 'calendar')),
-            $mform->createElement('checkbox', 'days[Sat]', '', get_string('saturday', 'calendar')),
-        ];
-
-        if ($CFG->calendar_startwday === '0') { // Week start from sunday.
-            array_unshift($days, $mform->createElement('checkbox', 'days[Sun]', '', get_string('sunday', 'calendar')));
-        } else {
-            array_push($days, $mform->createElement('checkbox', 'days[Sun]', '', get_string('sunday', 'calendar')));
-        }
-
-        array_push($days,
-            $mform->createElement('html',
-                '<div id="id_googlemeet_days_error" class="form-control-feedback invalid-feedback"></div>'
-            )
+        $mform->addElement(
+            'date_time_selector',
+            'timestart',
+            get_string('meetingstart', 'googlemeet'),
+            $dateoptions
         );
+        $mform->setDefault('timestart', $defaultstart);
+        $mform->addHelpButton('timestart', 'meetingstart', 'googlemeet');
 
-        $mform->addGroup($days, 'days', get_string('repeaton', 'googlemeet'), ['&nbsp;&nbsp;&nbsp;'], false);
-        $mform->disabledIf('days', 'addmultiply', 'notchecked');
-
-        $period = array(
-            1 => 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-            21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36
+        $mform->addElement(
+            'date_time_selector',
+            'timeend',
+            get_string('meetingend', 'googlemeet'),
+            $dateoptions
         );
-        $periodgroup = [
-            $mform->createElement('select', 'period', '', $period, false, true),
-            $mform->createElement('html', '<div class="items-center">' . get_string('week', 'googlemeet') . '</div>'),
-            $mform->createElement('html',
-                '<div id="id_googlemeet_periodgroup_error" class="form-control-feedback invalid-feedback"></div>'
-            ),
-        ];
-        $mform->addGroup($periodgroup, 'periodgroup', get_string('repeatevery', 'googlemeet'), [''], false);
-        $mform->disabledIf('periodgroup', 'addmultiply', 'notchecked');
+        $mform->setDefault('timeend', $defaultstart + HOURSECS);
+        $mform->addHelpButton('timeend', 'meetingend', 'googlemeet');
 
-        $eventenddategroup = [
-            $mform->createElement('date_selector', 'eventenddate', ''),
-            $mform->createElement('html',
-                '<div id="id_googlemeet_eventenddategroup_error" class="form-control-feedback invalid-feedback"></div>'
-            ),
+        $mform->addElement(
+            'autocomplete',
+            'timezone',
+            get_string('meetingtimezone', 'googlemeet'),
+            $this->timezone_options(),
+            ['multiple' => false]
+        );
+        $mform->setDefault('timezone', $scheduletimezone);
+        $mform->addHelpButton('timezone', 'meetingtimezone', 'googlemeet');
+
+        $mform->addElement('header', 'headerrecurrence', get_string('recurrenceeventdate', 'googlemeet'));
+        if (
+            !empty($config->multieventdateexpanded)
+            || trim((string) ($this->current->recurrence ?? '')) !== ''
+        ) {
+            $mform->setExpanded('headerrecurrence');
+        }
+
+        $mform->addElement(
+            'advcheckbox',
+            'recurrenceenabled',
+            '',
+            get_string('recurrenceenabled', 'googlemeet')
+        );
+        $mform->addHelpButton('recurrenceenabled', 'recurrenceeventdate', 'googlemeet');
+
+        $weekdays = [
+            'MO' => get_string('monday', 'calendar'),
+            'TU' => get_string('tuesday', 'calendar'),
+            'WE' => get_string('wednesday', 'calendar'),
+            'TH' => get_string('thursday', 'calendar'),
+            'FR' => get_string('friday', 'calendar'),
+            'SA' => get_string('saturday', 'calendar'),
+            'SU' => get_string('sunday', 'calendar'),
         ];
-        $mform->addGroup($eventenddategroup, 'eventenddategroup', get_string('repeatuntil', 'googlemeet'), [''], false);
-        $mform->disabledIf('eventenddategroup', 'addmultiply', 'notchecked');
+        if ((int) $CFG->calendar_startwday === 0) {
+            $weekdays = ['SU' => $weekdays['SU']] + array_diff_key($weekdays, ['SU' => true]);
+        }
+        $mform->addElement(
+            'autocomplete',
+            'recurrenceweekdays',
+            get_string('repeaton', 'googlemeet'),
+            $weekdays,
+            ['multiple' => true]
+        );
+        $mform->disabledIf('recurrenceweekdays', 'recurrenceenabled', 'notchecked');
+
+        $intervals = array_combine(range(1, 36), range(1, 36));
+        $mform->addElement(
+            'select',
+            'recurrenceinterval',
+            get_string('recurrenceinterval', 'googlemeet'),
+            $intervals
+        );
+        $mform->setDefault('recurrenceinterval', 1);
+        $mform->disabledIf('recurrenceinterval', 'recurrenceenabled', 'notchecked');
+
+        $mform->addElement(
+            'date_time_selector',
+            'recurrenceuntil',
+            get_string('repeatuntil', 'googlemeet'),
+            $dateoptions
+        );
+        $mform->setDefault('recurrenceuntil', $defaultstart + 4 * WEEKSECS);
+        $mform->disabledIf('recurrenceuntil', 'recurrenceenabled', 'notchecked');
+
+        $mform->addElement('hidden', 'recurrencecompatibilitylocked', 0);
+        $mform->setType('recurrencecompatibilitylocked', PARAM_BOOL);
+        if ($this->schedule_is_locked()) {
+            $mform->addElement(
+                'static',
+                'recurrencecompatibilitynotice',
+                '',
+                $OUTPUT->notification(get_string('recurrencecompatibilitynotice', 'googlemeet'), 'warning')
+            );
+            $mform->freeze([
+                'timestart',
+                'timeend',
+                'timezone',
+                'recurrenceenabled',
+                'recurrenceweekdays',
+                'recurrenceinterval',
+                'recurrenceuntil',
+            ]);
+        }
 
         $mform->addElement('header', 'headerroomurl', get_string('roomurl', 'googlemeet'));
         if (!empty($config->roomurlexpanded)) {
@@ -236,7 +269,7 @@ class mod_googlemeet_mod_form extends moodleform_mod {
         }
 
         $mform->addElement('checkbox', 'notify', '', get_string('notify', 'googlemeet'));
-        $mform->setDefault('notify', $config->notify);
+        $mform->setDefault('notify', (int) ($config->notify ?? 0));
         $mform->addHelpButton('notify', 'notify', 'googlemeet');
 
         $minutes = [];
@@ -246,7 +279,7 @@ class mod_googlemeet_mod_form extends moodleform_mod {
         $minutesbefore = $mform->addElement('select',
             'minutesbefore', get_string('minutesbefore', 'googlemeet'), $minutes, false, true
         );
-        $minutesbefore->setSelected($config->minutesbefore);
+        $minutesbefore->setSelected((int) ($config->minutesbefore ?? 0));
         $mform->addHelpButton('minutesbefore', 'minutesbefore', 'googlemeet');
 
         // Add standard elements.
@@ -258,19 +291,26 @@ class mod_googlemeet_mod_form extends moodleform_mod {
     }
 
     /**
-     * Decode json format from the database
+     * Maps stored canonical schedule values to the activity form.
      *
-     * @param array $defaultvalues Form defaults
+     * @param array $defaultvalues Form defaults.
      * @return void
      */
     public function data_preprocessing(&$defaultvalues) {
-        if ($this->current->instance) {
-            $defaultvalues['days'] = empty($defaultvalues['days'])
-                ? []
-                : json_decode($defaultvalues['days'], true);
-            if (($defaultvalues['integrationmode'] ?? null) === integration_mode::LEGACY) {
-                $defaultvalues['integrationmode'] = integration_mode::MANUAL;
-            }
+        if (empty($this->current->instance)) {
+            $defaultvalues['timezone'] = $this->schedule_timezone();
+            return;
+        }
+
+        $defaultvalues = (new meeting_form_data())->prepare_form_defaults(
+            $defaultvalues,
+            $this->schedule_timezone()
+        );
+        if (
+            !empty($this->current->instance)
+            && ($defaultvalues['integrationmode'] ?? null) === integration_mode::LEGACY
+        ) {
+            $defaultvalues['integrationmode'] = integration_mode::MANUAL;
         }
     }
 
@@ -285,40 +325,75 @@ class mod_googlemeet_mod_form extends moodleform_mod {
         global $COURSE, $USER;
 
         $errors = parent::validation($data, $files);
+        if (!$this->schedule_is_locked()) {
+            $timestart = (int) ($data['timestart'] ?? 0);
+            $timeend = (int) ($data['timeend'] ?? 0);
+            $timezone = (string) ($data['timezone'] ?? '');
 
-        $starttime = $data['starthour'] * HOURSECS + $data['startminute'] * MINSECS;
-        $endtime = $data['endhour'] * HOURSECS + $data['endminute'] * MINSECS;
+            if ($timestart <= 0) {
+                $errors['timestart'] = get_string('required');
+            }
+            if ($timeend <= $timestart) {
+                $errors['timeend'] = get_string('invalideventendtime', 'googlemeet');
+            }
+            if ($timestart > 0 && $timestart < (int) $COURSE->startdate) {
+                $errors['timestart'] = get_string(
+                    'earlierto',
+                    'googlemeet',
+                    userdate($COURSE->startdate, get_string('strftimedmyhm', 'googlemeet'))
+                );
+            }
 
-        if ($endtime <= $starttime) {
-            $errors['eventtime'] = get_string('invalideventendtime', 'googlemeet');
-        }
+            try {
+                $timezoneobject = new DateTimeZone($timezone);
+            } catch (Exception) {
+                $timezoneobject = null;
+                $errors['timezone'] = get_string('invalidmeetingtimezone', 'googlemeet');
+            }
 
-        if (!empty($data['addmultiply']) &&
-            $data['eventdate'] !== 0 &&
-            $data['eventenddate'] !== 0 &&
-            $data['eventenddate'] < $data['eventdate']
-        ) {
-            $errors['eventenddategroup'] = get_string('invalideventenddate', 'googlemeet');
-        }
+            if (!empty($data['recurrenceenabled'])) {
+                $interval = (int) ($data['recurrenceinterval'] ?? 0);
+                if ($interval < 1 || $interval > 36) {
+                    $errors['recurrenceinterval'] = get_string('invalidrecurrenceinterval', 'googlemeet');
+                }
+                if (empty($data['recurrenceweekdays'])) {
+                    $errors['recurrenceweekdays'] = get_string('checkweekdays', 'googlemeet');
+                }
 
-        $addmulti = isset($data['addmultiply']) ? (int)$data['addmultiply'] : 0;
-        $days = isset($data['days']);
+                $until = (int) ($data['recurrenceuntil'] ?? 0);
+                if ($until < $timestart) {
+                    $errors['recurrenceuntil'] = get_string('invalideventenddate', 'googlemeet');
+                } else if ($timezoneobject !== null && $timestart > 0) {
+                    $startday = (new DateTimeImmutable('@' . $timestart))
+                        ->setTimezone($timezoneobject)
+                        ->setTime(0, 0);
+                    $untilday = (new DateTimeImmutable('@' . $until))
+                        ->setTimezone($timezoneobject)
+                        ->setTime(0, 0);
+                    if ($untilday > $startday->modify('+1 year')) {
+                        $errors['recurrenceuntil'] = get_string('timeahead', 'googlemeet');
+                    }
+                }
+            }
 
-        if ($addmulti && !$days) {
-            $errors['days'] = get_string('checkweekdays', 'googlemeet');
-        } else if ($addmulti && !$this->checkweekdays($data['eventdate'], $data['eventenddate'], $data['days'])) {
-            $errors['days'] = get_string('checkweekdays', 'googlemeet');
-        }
-
-        if ($addmulti && ceil(($data['eventenddate'] - $data['eventdate']) / YEARSECS) > 1) {
-            $errors['eventenddate'] = get_string('timeahead', 'googlemeet');
-        }
-
-        $startdate = $data['eventdate'] + $starttime;
-        if ($startdate < $COURSE->startdate) {
-            $errors['eventtime'] = get_string('earlierto', 'googlemeet',
-                userdate($COURSE->startdate, get_string('strftimedmyhm', 'googlemeet'))
-            );
+            if (!array_intersect_key($errors, array_flip([
+                'timestart',
+                'timeend',
+                'timezone',
+                'recurrenceinterval',
+                'recurrenceweekdays',
+                'recurrenceuntil',
+            ]))) {
+                try {
+                    (new meeting_form_data())->normalize(
+                        (object) $data,
+                        $this->schedule_timezone(),
+                        !empty($this->current->instance) ? $this->current : null
+                    );
+                } catch (invalid_parameter_exception) {
+                    $errors['recurrenceuntil'] = get_string('invalidschedule', 'googlemeet');
+                }
+            }
         }
 
         $mode = (string) ($data['integrationmode'] ?? '');
@@ -355,48 +430,52 @@ class mod_googlemeet_mod_form extends moodleform_mod {
     }
 
     /**
-     * Check weekdays function.
-     * @param int $eventdate
-     * @param int $eventenddate
-     * @param array $days
+     * Returns the stored or current-user IANA timezone.
+     *
+     * @return string
+     */
+    private function schedule_timezone(): string {
+        global $USER;
+
+        $timezone = trim((string) ($this->current->timezone ?? ''));
+        if ($timezone === '') {
+            $timezone = get_user_timezone($USER->timezone);
+        }
+        try {
+            return (new DateTimeZone($timezone))->getName();
+        } catch (Exception) {
+            return 'UTC';
+        }
+    }
+
+    /**
+     * Returns localized IANA timezone options.
+     *
+     * @return array<string, string>
+     */
+    private function timezone_options(): array {
+        $timezones = ['UTC' => core_date::get_localised_timezone('UTC')];
+        foreach (DateTimeZone::listIdentifiers() as $timezone) {
+            $timezones[$timezone] = core_date::get_localised_timezone($timezone);
+        }
+        core_collator::asort($timezones);
+
+        return $timezones;
+    }
+
+    /**
+     * Whether an imported recurrence must be preserved read-only.
+     *
      * @return bool
      */
-    private function checkweekdays($eventdate, $eventenddate, $days) {
-        $found = false;
-
-        if (!$days) {
+    private function schedule_is_locked(): bool {
+        if (empty($this->current->instance)) {
             return false;
         }
 
-        $daysofweek = [
-            0 => "Sun",
-            1 => "Mon",
-            2 => "Tue",
-            3 => "Wed",
-            4 => "Thu",
-            5 => "Fri",
-            6 => "Sat"
-        ];
-
-        $start = new DateTime(date("Y-m-d", $eventdate));
-        $interval = new DateInterval('P1D');
-        $end = new DateTime(date("Y-m-d", $eventenddate));
-        $end->add(new DateInterval('P1D'));
-
-        $period = new DatePeriod($start, $interval, $end);
-        foreach ($period as $date) {
-            if (!$found) {
-                foreach ($days as $day => $value) {
-                    $key = array_search($day, $daysofweek);
-                    if ($date->format("w") == $key) {
-                        $found = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        return $found;
+        return !(new meeting_form_data())->is_recurrence_editable(
+            (string) ($this->current->recurrence ?? '')
+        );
     }
 
     /**
@@ -408,7 +487,6 @@ class mod_googlemeet_mod_form extends moodleform_mod {
      */
     private function validate_url(string $url, array $errors) {
         if (googlemeet_clear_url($url) == null) {
-            $errors['generateurlgroup'] = get_string('url_failed', 'googlemeet');
             $errors['url'] = get_string('url_failed', 'googlemeet');
         }
         return $errors;

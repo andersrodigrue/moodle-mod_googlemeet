@@ -154,10 +154,10 @@ The fifth structural slice connects teacher actions to the managed boundary:
   supplied or transferred through submitted form fields;
 - existing managed meetings cannot be silently downgraded to manual links or taken
   over by a different editor;
-- the legacy date controls are normalized to absolute `timestart` and `timeend`
-  values in the owner's IANA timezone;
+- the activity form persists absolute `timestart` and `timeend` values in an
+  explicit IANA timezone;
 - weekly form recurrence becomes one canonical RFC 5545 `RRULE`, with a UTC
-  inclusive end-of-day boundary;
+  inclusive boundary;
 - new managed activities are inserted as `draft` and immediately queued in the
   owner's context;
 - managed edits preserve remote identity and queue reconciliation instead of
@@ -356,10 +356,37 @@ and makes the normalized fields authoritative:
 - restore normalizes old backups and rebuilds the local Calendar mirror from
   portable canonical fields.
 
+## Canonical schedule editor
+
+The eleventh structural slice removes duplicated scheduling controls from the
+teacher workflow:
+
+- the activity editor now uses Moodle `date_time_selector` controls directly for
+  `timestart`, `timeend` and the inclusive recurrence boundary;
+- the meeting timezone is selected explicitly from localized IANA identifiers;
+- weekly recurrence uses canonical weekday identifiers, an interval from one to
+  thirty-six weeks and a Monday week start;
+- form submission no longer persists `eventdate`, separate hour/minute values,
+  `addmultiply`, JSON weekdays, `period` or `eventenddate`;
+- the persistence mapper strips forged deprecated scheduling fields before
+  insertion or update;
+- preprocessing decodes the editable weekly `RRULE` subset back into teacher
+  controls without deriving values from stale legacy columns;
+- imported `COUNT`, `RDATE`, `EXDATE` or otherwise non-representable schedules
+  remain canonical and read-only in the editor, so an ordinary title or URL edit
+  cannot silently discard occurrence exceptions;
+- old backups and records without valid canonical timestamps continue through a
+  dedicated legacy conversion path;
+- new backups contain only the portable canonical schedule, while restore remains
+  able to consume legacy date and recurrence elements;
+- the deprecated columns remain physically present with documented compatibility
+  defaults. Removing them requires a later deprecation window and a separate
+  upgrade decision.
+
 ## Next structural slice
 
-The next slice should migrate the activity editing interface away from the
-duplicated legacy date, clock and recurrence storage fields. It should use modern
-Moodle form controls backed directly by the canonical schedule, preserve an
-explicit compatibility mapper for old backups, and then prepare a later schema
-cleanup once an appropriate deprecation window has elapsed.
+The next slice should implement an explicit guest policy for Calendar-managed
+meetings. The teacher should be able to choose whether active course participants
+become Google Calendar attendees, with a bounded reconciliation strategy,
+appropriate `sendUpdates` behavior, privacy declarations and protection against
+accidentally emailing an entire course during ordinary edits.
