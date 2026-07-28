@@ -64,8 +64,13 @@ final class notify_event_test extends \advanced_testcase {
         );
 
         $sink = $this->redirectMessages();
-        (new notify_event())->execute();
-        (new notify_event())->execute();
+        ob_start();
+        try {
+            (new notify_event())->execute();
+            (new notify_event())->execute();
+        } finally {
+            ob_end_clean();
+        }
         $messages = $sink->get_messages();
         $sink->close();
 
