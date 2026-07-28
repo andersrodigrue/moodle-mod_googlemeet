@@ -80,6 +80,7 @@ final class sync_status_test extends \advanced_testcase {
         $this->assertTrue($failed['canretry']);
         $this->assertTrue($failed['cancancel']);
         $this->assertFalse($failed['canreconnect']);
+        $this->assertFalse($failed['candisconnect']);
         $this->assertSame(42, $failed['cmid']);
         $this->assertSame(sesskey(), $failed['sesskey']);
 
@@ -105,6 +106,24 @@ final class sync_status_test extends \advanced_testcase {
         $this->assertFalse($data['inprogress']);
         $this->assertFalse($data['canretry']);
         $this->assertTrue($data['canreconnect']);
+        $this->assertFalse($data['cancancel']);
+    }
+
+    /**
+     * A reconciled cancellation exposes only local activity detachment.
+     */
+    public function test_cancelled_meeting_exposes_disconnect(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $data = (new sync_status((object) [
+            'syncstatus' => sync_state::CANCELLED,
+        ], false, 42, true))->export_for_template($this->renderer());
+
+        $this->assertTrue($data['hasactions']);
+        $this->assertTrue($data['candisconnect']);
+        $this->assertFalse($data['canretry']);
+        $this->assertFalse($data['canreconnect']);
         $this->assertFalse($data['cancancel']);
     }
 

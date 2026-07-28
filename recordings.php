@@ -24,6 +24,7 @@
 
 use mod_googlemeet\local\recording_manager;
 use mod_googlemeet\local\recording_oauth_manager;
+use mod_googlemeet\local\privacy_lifecycle;
 
 require(__DIR__ . '/../../config.php');
 
@@ -39,18 +40,28 @@ $context = context_module::instance($cm->id);
 require_capability('mod/googlemeet:syncgoogledrive', $context);
 
 $returnurl = new moodle_url('/mod/googlemeet/view.php', ['id' => $cm->id]);
-if ($action !== 'sync') {
+if (!in_array($action, ['sync', 'disconnect'], true)) {
     throw new invalid_parameter_exception(get_string('recordingsinvalidaction', 'mod_googlemeet'));
-}
-
-$issuerid = recording_oauth_manager::configured_issuer_id();
-if ($issuerid <= 0) {
-    throw new moodle_exception('recordingsoauthunavailable', 'mod_googlemeet');
 }
 
 $existingowner = (int) ($googlemeet->recordingowneruserid ?? 0);
 if ($existingowner > 0 && $existingowner !== (int) $USER->id) {
     throw new moodle_exception('recordingowneronly', 'mod_googlemeet');
+}
+
+if ($action === 'disconnect') {
+    (new privacy_lifecycle())->disconnect_recordings((int) $googlemeet->id, (int) $USER->id);
+    redirect(
+        $returnurl,
+        get_string('recordingsdisconnected', 'mod_googlemeet'),
+        null,
+        \core\output\notification::NOTIFY_SUCCESS
+    );
+}
+
+$issuerid = recording_oauth_manager::configured_issuer_id();
+if ($issuerid <= 0) {
+    throw new moodle_exception('recordingsoauthunavailable', 'mod_googlemeet');
 }
 
 $oauthmanager = new recording_oauth_manager();

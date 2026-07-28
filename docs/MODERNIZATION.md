@@ -114,7 +114,9 @@ The fourth structural slice provides the first production composition:
   `https://www.googleapis.com/auth/calendar.events`; Drive access is not added;
 - Moodle's user OAuth client is created with automatic refresh enabled, so access
   and refresh tokens remain in Moodle core's storage rather than plugin tables;
-- explicit plugin disconnect delegates to Moodle core's scoped `log_out()` lifecycle;
+- issuer-level account revocation delegates to Moodle core's scoped `log_out()`
+  lifecycle, while activity-level detachment never revokes a grant that another
+  activity may still use;
 - the plugin does not silently call Google's project-wide revocation endpoint,
   because that operation invalidates all scopes granted to the OAuth project and
   could also disrupt Google login or another integration using the same issuer;
@@ -272,10 +274,52 @@ This boundary intentionally does not request a Drive API scope and never mutates
 Drive permissions. The Drive file ID and playback URI are metadata returned by the
 Meet API for a generated recording.
 
+## Privacy API and explicit activity detachment
+
+The ninth structural slice closes the local personal-data lifecycle:
+
+- the provider now declares the activity-owner, recording-owner, legacy organizer
+  and reminder-recipient relationships instead of reporting only reminder receipts;
+- metadata covers the three local data tables, the Google Calendar and Google Meet
+  external locations, and Moodle's OAuth 2, Calendar and messaging subsystems;
+- context discovery and user discovery include both OAuth owners, the legacy email
+  relationship and notification recipients;
+- the former `choice` module-name error in user discovery is removed;
+- exports use separate subcontexts for Calendar authorization, recording
+  authorization, shared recording references and notification receipts, avoiding
+  one receipt overwriting another at the activity root;
+- privacy deletion clears only matching owner links, issuer references, remote
+  Calendar identity and sanitized operational diagnostics;
+- legacy organizer email and its obsolete external event identifier are removed
+  when the Moodle user's email matches case-insensitively;
+- recording IDs, names, visibility and playback links remain shared course content
+  when the teacher who authorized discovery is removed;
+- context-wide deletion preserves the activity schedule and manual Meet links, and
+  never deletes shared recording references;
+- all lifecycle mutations run under the same activity-scoped lock used by
+  synchronization workers;
+- activity-level deletion and detachment never call Google or log out an OAuth
+  issuer, because the grant belongs to the Moodle user and may serve other
+  activities;
+- recording owners receive a session-protected POST command that detaches discovery
+  while preserving already published references;
+- Calendar owners can remove the local authorization and remote identifiers only
+  after the remote cancellation has settled as `cancelled`, preventing an active
+  external event from being silently orphaned;
+- automated Privacy API tests extend Moodle's dedicated
+  `core_privacy\tests\provider_testcase` and exercise metadata, discovery, export,
+  single-user deletion, approved-user batches and context-wide deletion.
+
+External copies remain governed by the connected Google account. A Moodle privacy
+request removes the plugin's local personal-data relationship; it does not claim to
+erase a Calendar event or Drive recording from Google. Remote Calendar deletion is
+the explicit cancellation command, and remote recording retention is managed in
+Google Drive.
+
 ## Next structural slice
 
-The next slice should complete the privacy and lifecycle audit now that Calendar
-and recording authorization are separate. It should declare and exercise the
-activity-owner and recording-owner data paths in Moodle's Privacy API, verify
-user-deletion behavior without deleting shared course content, and review recovery
-and explicit recording-disconnect commands.
+The next slice should modernize the remaining local schedule and reminder
+lifecycle. It should make normalized `timestart`, `timeend` and recurrence the
+authoritative source, remove duplicated legacy date calculations from runtime
+paths, and cover scheduled reminders, Moodle Calendar updates and activity
+completion against the Moodle 5.2 APIs.

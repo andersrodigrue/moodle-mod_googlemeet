@@ -131,7 +131,11 @@ final class sync_status implements \renderable, \templatable {
                 sync_state::READY,
                 sync_state::FAILED,
             ], true);
-            $data['hasactions'] = $data['canretry'] || $data['canreconnect'] || $data['cancancel'];
+            $data['candisconnect'] = $state === sync_state::CANCELLED;
+            $data['hasactions'] = $data['canretry']
+                || $data['canreconnect']
+                || $data['cancancel']
+                || $data['candisconnect'];
         }
 
         return $data;

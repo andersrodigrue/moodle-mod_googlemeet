@@ -69,6 +69,15 @@ owner-only cancellation. Retry, reconnect and cancel commands are submitted thro
 session-protected POST actions; remote Calendar deletion is never triggered merely
 by deleting the Moodle activity.
 
+The Moodle Privacy API declares Calendar ownership, recording authorization,
+legacy organizer data, reminder receipts, external Google processing and the
+Moodle subsystems involved. A teacher can detach recording discovery while
+preserving recordings already published to the course. A managed Calendar
+integration can be detached only after its remote event has been successfully
+cancelled. Privacy deletion clears local owner links and diagnostics but does not
+revoke an OAuth grant shared by other activities or delete shared recording
+references.
+
 Moodle 5.2's centralized Activities page shows the meeting time, synchronization
 state and a safe primary action. Backups preserve portable scheduling settings but
 never clone OAuth ownership or remote Calendar identity into a restored activity.

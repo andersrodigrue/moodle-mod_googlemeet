@@ -26,6 +26,7 @@ use mod_googlemeet\api\calendar_authorization_exception;
 use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\meeting_manager;
 use mod_googlemeet\local\oauth_manager;
+use mod_googlemeet\local\privacy_lifecycle;
 use mod_googlemeet\local\sync_state;
 
 require(__DIR__ . '/../../config.php');
@@ -114,6 +115,11 @@ switch ($action) {
             $manager->queue((int) $meeting->id, (int) $USER->id);
         }
         redirect($returnurl, get_string('syncactionqueued', 'mod_googlemeet'), null, 'success');
+        break;
+
+    case 'disconnect':
+        (new privacy_lifecycle())->disconnect_calendar((int) $meeting->id, (int) $USER->id);
+        redirect($returnurl, get_string('syncdisconnected', 'mod_googlemeet'), null, 'success');
         break;
 
     default:

@@ -257,6 +257,18 @@ function googlemeet_print_recordings($googlemeet, $cm, $context) {
 
         $issuerid = recording_oauth_manager::configured_issuer_id();
         $recordingowner = (int) ($googlemeet->recordingowneruserid ?? 0);
+        if ($recordingowner === (int) $USER->id) {
+            $disconnectbutton = new single_button(
+                new moodle_url('/mod/googlemeet/recordings.php', [
+                    'id' => $cm->id,
+                    'action' => 'disconnect',
+                ]),
+                get_string('recordingsdisconnect', 'mod_googlemeet'),
+                'post',
+                true
+            );
+            $status .= html_writer::div($OUTPUT->render($disconnectbutton), 'mt-2');
+        }
         if ($issuerid <= 0) {
             $status .= $OUTPUT->notification(
                 get_string('recordingsoauthunavailable', 'mod_googlemeet'),
