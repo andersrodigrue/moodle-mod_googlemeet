@@ -92,9 +92,9 @@ jobs:
       - name: PHPUnit
         if: ${{ !cancelled() }}
         run: >
-          moodle-plugin-ci phpunit
+          moodle/vendor/bin/phpunit
+          --configuration moodle/public/mod/googlemeet/phpunit.xml
           --fail-on-warning
-          --
           --display-notices
           --display-phpunit-deprecations
 
