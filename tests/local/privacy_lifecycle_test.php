@@ -254,9 +254,11 @@ final class privacy_lifecycle_test extends \advanced_testcase {
     private function insert_event(int $googlemeetid): int {
         global $DB;
 
+        $eventdate = time();
         return $DB->insert_record('googlemeet_events', (object) [
             'googlemeetid' => $googlemeetid,
-            'eventdate' => time(),
+            'occurrencekey' => hash('sha256', 'v1:' . $eventdate),
+            'eventdate' => $eventdate,
             'duration' => HOURSECS,
             'timemodified' => time(),
         ]);

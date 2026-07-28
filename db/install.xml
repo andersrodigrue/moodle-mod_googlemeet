@@ -74,14 +74,21 @@
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="googlemeetid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="occurrencekey" TYPE="char" LENGTH="64" NOTNULL="true" SEQUENCE="false" COMMENT="Stable key derived from the canonical occurrence start."/>
         <FIELD NAME="eventdate" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The date of the event."/>
         <FIELD NAME="duration" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The duration of the event."/>
+        <FIELD NAME="calendareventid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Moodle Calendar event reconciled for this occurrence."/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the instance was added to the course."/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="googlemeetidfk" TYPE="foreign" FIELDS="googlemeetid" REFTABLE="googlemeet" REFFIELDS="id"/>
       </KEYS>
+      <INDEXES>
+        <INDEX NAME="activityoccurrence" UNIQUE="true" FIELDS="googlemeetid, occurrencekey"/>
+        <INDEX NAME="calendareventid" UNIQUE="false" FIELDS="calendareventid"/>
+        <INDEX NAME="eventdate" UNIQUE="false" FIELDS="eventdate"/>
+      </INDEXES>
     </TABLE>
     <TABLE NAME="googlemeet_recordings" COMMENT="Stores references from Google Meet recordings.">
       <FIELDS>
@@ -103,17 +110,21 @@
         <INDEX NAME="activityrecording" UNIQUE="true" FIELDS="googlemeetid, recordingid"/>
       </INDEXES>
     </TABLE>
-    <TABLE NAME="googlemeet_notify_done" COMMENT="Stores references from Google Meet recordings.">
+    <TABLE NAME="googlemeet_notify_done" COMMENT="Stores receipts for meeting reminders sent to users.">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="eventid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="timesent" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of the video creation date."/>
+        <FIELD NAME="timesent" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp when the reminder was sent."/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="eventidfk" TYPE="foreign" FIELDS="eventid" REFTABLE="googlemeet_events" REFFIELDS="id"/>
       </KEYS>
+      <INDEXES>
+        <INDEX NAME="eventuser" UNIQUE="true" FIELDS="eventid, userid"/>
+        <INDEX NAME="userid" UNIQUE="false" FIELDS="userid"/>
+      </INDEXES>
     </TABLE>
   </TABLES>
 </XMLDB>

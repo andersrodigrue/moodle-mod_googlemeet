@@ -277,5 +277,214 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
         upgrade_mod_savepoint(true, 2026072608, 'googlemeet');
     }
 
+    if ($oldversion < 2026072610) {
+        $eventtable = new xmldb_table('googlemeet_events');
+        $occurrencekeyfield = new xmldb_field(
+            'occurrencekey',
+            XMLDB_TYPE_CHAR,
+            '64',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            '',
+            'googlemeetid'
+        );
+        if (!$dbman->field_exists($eventtable, $occurrencekeyfield)) {
+            $dbman->add_field($eventtable, $occurrencekeyfield);
+        }
+        $calendareventidfield = new xmldb_field(
+            'calendareventid',
+            XMLDB_TYPE_INTEGER,
+            '10',
+            null,
+            null,
+            null,
+            null,
+            'duration'
+        );
+        if (!$dbman->field_exists($eventtable, $calendareventidfield)) {
+            $dbman->add_field($eventtable, $calendareventidfield);
+        }
+
+        // Existing expanded rows are the safest source for legacy absolute times.
+        $meetings = $DB->get_recordset('googlemeet', null, 'id ASC');
+        foreach ($meetings as $meeting) {
+            $events = $DB->get_records(
+                'googlemeet_events',
+                ['googlemeetid' => $meeting->id],
+                'eventdate ASC, id ASC'
+            );
+            $firstevent = $events ? reset($events) : false;
+            $update = (object) ['id' => $meeting->id];
+            $changed = false;
+
+            if ((int) $meeting->timestart <= 0) {
+                $update->timestart = $firstevent
+                    ? (int) $firstevent->eventdate
+                    : (int) $meeting->eventdate
+                        + (int) $meeting->starthour * HOURSECS
+                        + (int) $meeting->startminute * MINSECS;
+                $changed = true;
+            }
+            $start = (int) ($update->timestart ?? $meeting->timestart);
+            if ((int) $meeting->timeend <= $start) {
+                $legacyduration = (int) $meeting->endhour * HOURSECS
+                    + (int) $meeting->endminute * MINSECS
+                    - (int) $meeting->starthour * HOURSECS
+                    - (int) $meeting->startminute * MINSECS;
+                $duration = $firstevent ? (int) $firstevent->duration : $legacyduration;
+                $update->timeend = $start + max(MINSECS, $duration);
+                $changed = true;
+            }
+            if (trim((string) ($meeting->timezone ?? '')) === '') {
+                $update->timezone = \core_date::get_server_timezone();
+                $changed = true;
+            }
+            if (trim((string) ($meeting->recurrence ?? '')) === '' && count($events) > 1) {
+                $rdates = [];
+                foreach (array_slice(array_values($events), 1) as $event) {
+                    $rdates[] = gmdate('Ymd\THis\Z', (int) $event->eventdate);
+                }
+                $update->recurrence = 'RRULE:FREQ=WEEKLY;COUNT=1'
+                    . "\nRDATE:" . implode(',', $rdates);
+                $changed = true;
+            }
+            if ($changed) {
+                $DB->update_record('googlemeet', $update);
+            }
+        }
+        $meetings->close();
+
+        // Add stable occurrence keys while consolidating any legacy duplicates.
+        $events = $DB->get_recordset(
+            'googlemeet_events',
+            null,
+            'googlemeetid ASC, eventdate ASC, id ASC'
+        );
+        $kept = [];
+        foreach ($events as $event) {
+            $key = hash('sha256', 'v1:' . (int) $event->eventdate);
+            $activitykey = (int) $event->googlemeetid . ':' . $key;
+            if (!isset($kept[$activitykey])) {
+                $kept[$activitykey] = (int) $event->id;
+                $DB->set_field(
+                    'googlemeet_events',
+                    'occurrencekey',
+                    $key,
+                    ['id' => (int) $event->id]
+                );
+                continue;
+            }
+
+            $keeperid = $kept[$activitykey];
+            $receipts = $DB->get_records('googlemeet_notify_done', ['eventid' => (int) $event->id]);
+            foreach ($receipts as $receipt) {
+                if ($DB->record_exists('googlemeet_notify_done', [
+                    'eventid' => $keeperid,
+                    'userid' => (int) $receipt->userid,
+                ])) {
+                    $DB->delete_records('googlemeet_notify_done', ['id' => (int) $receipt->id]);
+                } else {
+                    $DB->set_field(
+                        'googlemeet_notify_done',
+                        'eventid',
+                        $keeperid,
+                        ['id' => (int) $receipt->id]
+                    );
+                }
+            }
+            $DB->delete_records('googlemeet_events', ['id' => (int) $event->id]);
+        }
+        $events->close();
+
+        // Associate matching pre-existing Moodle Calendar events where possible.
+        $meetings = $DB->get_records('googlemeet', null, 'id ASC', 'id');
+        foreach ($meetings as $meeting) {
+            $calendarevents = $DB->get_records('event', [
+                'modulename' => 'googlemeet',
+                'instance' => (int) $meeting->id,
+                'eventtype' => \mod_googlemeet\helper::GOOGLEMEET_EVENT_START,
+            ], 'timestart ASC, id ASC', 'id, timestart');
+            $bytime = [];
+            foreach ($calendarevents as $calendarevent) {
+                $bytime[(int) $calendarevent->timestart][] = (int) $calendarevent->id;
+            }
+            $localevents = $DB->get_records(
+                'googlemeet_events',
+                ['googlemeetid' => (int) $meeting->id],
+                'eventdate ASC, id ASC'
+            );
+            foreach ($localevents as $localevent) {
+                $time = (int) $localevent->eventdate;
+                if (!empty($bytime[$time])) {
+                    $DB->set_field(
+                        'googlemeet_events',
+                        'calendareventid',
+                        array_shift($bytime[$time]),
+                        ['id' => (int) $localevent->id]
+                    );
+                }
+            }
+        }
+
+        // Remove duplicate receipts before enforcing task idempotency in the database.
+        $receipts = $DB->get_recordset(
+            'googlemeet_notify_done',
+            null,
+            'eventid ASC, userid ASC, id ASC'
+        );
+        $seenreceipts = [];
+        foreach ($receipts as $receipt) {
+            $key = (int) $receipt->eventid . ':' . (int) $receipt->userid;
+            if (isset($seenreceipts[$key])) {
+                $DB->delete_records('googlemeet_notify_done', ['id' => (int) $receipt->id]);
+            } else {
+                $seenreceipts[$key] = true;
+            }
+        }
+        $receipts->close();
+
+        $eventindexes = [
+            new xmldb_index(
+                'activityoccurrence',
+                XMLDB_INDEX_UNIQUE,
+                ['googlemeetid', 'occurrencekey']
+            ),
+            new xmldb_index('calendareventid', XMLDB_INDEX_NOTUNIQUE, ['calendareventid']),
+            new xmldb_index('eventdate', XMLDB_INDEX_NOTUNIQUE, ['eventdate']),
+        ];
+        foreach ($eventindexes as $index) {
+            if (!$dbman->index_exists($eventtable, $index)) {
+                $dbman->add_index($eventtable, $index);
+            }
+        }
+
+        $receipttable = new xmldb_table('googlemeet_notify_done');
+        $receiptindexes = [
+            new xmldb_index('eventuser', XMLDB_INDEX_UNIQUE, ['eventid', 'userid']),
+            new xmldb_index('userid', XMLDB_INDEX_NOTUNIQUE, ['userid']),
+        ];
+        foreach ($receiptindexes as $index) {
+            if (!$dbman->index_exists($receipttable, $index)) {
+                $dbman->add_index($receipttable, $index);
+            }
+        }
+
+        // The final schema requires a non-empty stable key.
+        $finaloccurrencekeyfield = new xmldb_field(
+            'occurrencekey',
+            XMLDB_TYPE_CHAR,
+            '64',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            null,
+            'googlemeetid'
+        );
+        $dbman->change_field_default($eventtable, $finaloccurrencekeyfield);
+
+        upgrade_mod_savepoint(true, 2026072610, 'googlemeet');
+    }
+
     return true;
 }

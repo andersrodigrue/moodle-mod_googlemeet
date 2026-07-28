@@ -95,6 +95,20 @@ final class meeting_form_data_test extends \advanced_testcase {
     }
 
     /**
+     * The persistence boundary enforces the form's one-year recurrence limit.
+     */
+    public function test_rejects_recurrence_longer_than_one_year(): void {
+        $data = $this->form_data();
+        $data->addmultiply = 1;
+        $data->period = 1;
+        $data->days = ['Mon' => 1];
+        $data->eventenddate = $data->eventdate + YEARSECS + DAYSECS;
+
+        $this->expectException(\invalid_parameter_exception::class);
+        (new meeting_form_data())->normalize($data, 'America/Sao_Paulo');
+    }
+
+    /**
      * Returns representative form data.
      *
      * @return \stdClass

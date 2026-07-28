@@ -82,6 +82,12 @@ Moodle 5.2's centralized Activities page shows the meeting time, synchronization
 state and a safe primary action. Backups preserve portable scheduling settings but
 never clone OAuth ownership or remote Calendar identity into a restored activity.
 
+The canonical `timestart`, `timeend`, timezone and recurrence fields now drive both
+Moodle Calendar and reminders. Local occurrence IDs are reconciled instead of
+blindly recreated, preserving reminder receipts across ordinary edits. Reminder
+recipients are selected through a dedicated capability rather than a hard-coded
+role ID.
+
 ## Security
 
 If you discover any security related issues, please email [ronefel@hotmail.com](mailto:ronefel@hotmail.com) instead of using the issue tracker.

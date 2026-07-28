@@ -64,12 +64,45 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
             }
         }
 
+        $this->normalise_schedule($data);
         $this->normalise_integration($data);
 
         // Insert the googlemeet record.
         $newitemid = $DB->insert_record('googlemeet', $data);
         // Immediately after inserting "activity" record, call this.
         $this->apply_activity_instance($newitemid);
+    }
+
+    /**
+     * Ensures older backups acquire the canonical scheduling fields.
+     *
+     * @param stdClass $data Restored activity data.
+     */
+    private function normalise_schedule(stdClass $data): void {
+        $timezone = trim((string) ($data->timezone ?? ''));
+        if ($timezone === '') {
+            $timezone = \core_date::get_server_timezone();
+        }
+
+        if ((int) ($data->timestart ?? 0) > 0 && (int) ($data->timeend ?? 0) > (int) $data->timestart) {
+            $data->timezone = $timezone;
+            return;
+        }
+
+        if (!empty($data->days) && is_string($data->days)) {
+            $days = json_decode($data->days, true);
+            $data->days = is_array($days) ? $days : [];
+        }
+        $normalized = (new \mod_googlemeet\local\meeting_form_data())->normalize($data, $timezone);
+        $data->originalname = $normalized->originalname;
+        $data->timestart = $normalized->timestart;
+        $data->timeend = $normalized->timeend;
+        $data->timezone = $normalized->timezone;
+        $data->recurrence = $normalized->recurrence;
+        $data->sendupdates = $normalized->sendupdates;
+        if (is_array($data->days)) {
+            $data->days = json_encode($data->days);
+        }
     }
 
     /**
@@ -149,6 +182,8 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
         $data->googlemeetid = $this->get_new_parentid('googlemeet');
         $data->eventdate = $this->apply_date_offset($data->eventdate);
         $data->timemodified = $this->apply_date_offset($data->timemodified);
+        $data->occurrencekey = hash('sha256', 'v1:' . (int) $data->eventdate);
+        $data->calendareventid = null;
 
         $newitemid = $DB->insert_record('googlemeet_events', $data);
         $this->set_mapping('googlemeet_event', $oldid, $newitemid);
@@ -158,6 +193,11 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
      * Defines post-execution actions.
      */
     protected function after_execute() {
+        global $DB;
+
         $this->add_related_files('mod_googlemeet', 'intro', null);
+        $googlemeetid = (int) $this->get_new_parentid('googlemeet');
+        $meeting = $DB->get_record('googlemeet', ['id' => $googlemeetid], '*', MUST_EXIST);
+        (new \mod_googlemeet\local\schedule_manager())->synchronise($meeting);
     }
 }

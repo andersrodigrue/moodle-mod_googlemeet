@@ -114,6 +114,9 @@ final class meeting_form_data {
         if ($eventenddate < (int) $data->eventdate) {
             throw new \invalid_parameter_exception('The recurrence end date cannot precede the meeting date.');
         }
+        if ($eventenddate - (int) $data->eventdate > YEARSECS) {
+            throw new \invalid_parameter_exception('The recurrence cannot exceed one year.');
+        }
         $until = $this->timestamp($eventenddate, 23, 59, $timezone, 59);
 
         return 'RRULE:FREQ=WEEKLY;INTERVAL=' . $interval

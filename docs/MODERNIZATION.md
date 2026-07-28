@@ -316,10 +316,50 @@ erase a Calendar event or Drive recording from Google. Remote Calendar deletion 
 the explicit cancellation command, and remote recording retention is managed in
 Google Drive.
 
+## Canonical local schedule and reminders
+
+The tenth structural slice removes the legacy schedule calculation from runtime
+and makes the normalized fields authoritative:
+
+- `schedule_expander` derives a bounded list of local occurrences from
+  `timestart`, `timeend`, the IANA timezone and the normalized recurrence;
+- weekly interval and weekday expansion preserves local wall-clock time across
+  daylight-saving transitions;
+- the supported local recurrence boundary includes the form-generated `UNTIL`
+  rules and bounded imported `COUNT`, `RDATE` and `EXDATE` values;
+- every occurrence receives a stable activity-scoped key based on its canonical
+  start timestamp;
+- `schedule_manager` reconciles rows and Moodle Calendar events, updating
+  unchanged occurrences in place instead of deleting and recreating the series;
+- reminder receipts survive name, description and duration edits when the
+  occurrence start is unchanged;
+- removed occurrences delete their linked Calendar event and reminder receipts
+  through the Moodle Calendar API;
+- the standard `googlemeet_refresh_events()` hook can rebuild Calendar events
+  from the canonical schedule;
+- action events provide a Moodle dashboard action while the occurrence remains
+  current, and managed meetings become actionable only in the `ready` state;
+- the existing completion-by-view contract remains the appropriate Moodle 5.2
+  completion behavior and continues to be marked from the activity view;
+- the reminder query is parameterized and bounded, and no longer assumes that
+  Moodle's student role has database ID `5`;
+- a dedicated `mod/googlemeet:receivenotification` capability selects active
+  enrolled recipients, with the student archetype enabled by default;
+- a database uniqueness boundary prevents two receipts for the same user and
+  occurrence, and the scheduled task stores a receipt only after Message API
+  delivery succeeds;
+- upgrade fills missing canonical timestamps from existing expanded events,
+  consolidates duplicates without losing receipts, links matching Calendar
+  events and adds the reconciliation indexes;
+- new backups omit the derived occurrence mirror, while restore still accepts
+  older backups containing expanded rows;
+- restore normalizes old backups and rebuilds the local Calendar mirror from
+  portable canonical fields.
+
 ## Next structural slice
 
-The next slice should modernize the remaining local schedule and reminder
-lifecycle. It should make normalized `timestart`, `timeend` and recurrence the
-authoritative source, remove duplicated legacy date calculations from runtime
-paths, and cover scheduled reminders, Moodle Calendar updates and activity
-completion against the Moodle 5.2 APIs.
+The next slice should migrate the activity editing interface away from the
+duplicated legacy date, clock and recurrence storage fields. It should use modern
+Moodle form controls backed directly by the canonical schedule, preserve an
+explicit compatibility mapper for old backups, and then prepare a later schema
+cleanup once an appropriate deprecation window has elapsed.

@@ -27,6 +27,7 @@ use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\meeting_form_data;
 use mod_googlemeet\local\meeting_manager;
 use mod_googlemeet\local\oauth_manager;
+use mod_googlemeet\local\schedule_manager;
 use mod_googlemeet\local\sync_state;
 
 /**
@@ -99,9 +100,7 @@ function googlemeet_add_instance($googlemeet, $mform = null) {
         $googlemeet->days = json_decode($googlemeet->days, true);
     }
 
-    $events = googlemeet_construct_events_data_for_add($googlemeet);
-
-    googlemeet_set_events($googlemeet, $events);
+    (new schedule_manager())->synchronise($googlemeet);
     if ($googlemeet->integrationmode === integration_mode::MANAGED) {
         (new meeting_manager())->queue((int) $googlemeet->id, (int) $googlemeet->owneruserid);
     }
@@ -152,9 +151,7 @@ function googlemeet_update_instance($googlemeet, $mform = null) {
     if (isset($googlemeet->days)) {
         $googlemeet->days = json_decode($googlemeet->days, true);
     }
-    $events = googlemeet_construct_events_data_for_add($googlemeet);
-
-    googlemeet_set_events($googlemeet, $events);
+    (new schedule_manager())->synchronise($googlemeet);
     if ($googlemeet->integrationmode === integration_mode::MANAGED) {
         (new meeting_manager())->queue((int) $googlemeet->id, (int) $googlemeet->owneruserid);
     }
@@ -294,7 +291,7 @@ function googlemeet_delete_instance($id) {
         return false;
     }
 
-    googlemeet_delete_events($id);
+    (new schedule_manager())->delete((int) $id);
 
     $DB->delete_records('googlemeet_recordings', ['googlemeetid' => $id]);
 
@@ -362,6 +359,94 @@ function googlemeet_view($googlemeet, $course, $cm, $context) {
     // Completion.
     $completion = new completion_info($course);
     $completion->set_module_viewed($cm);
+}
+
+/**
+ * Rebuilds Moodle Calendar events from the canonical local schedule.
+ *
+ * @param int $courseid Optional course restriction used by Moodle's refresh task.
+ * @return bool
+ */
+function googlemeet_refresh_events($courseid = 0): bool {
+    global $DB;
+
+    $conditions = [];
+    if ((int) $courseid > 0) {
+        $conditions['course'] = (int) $courseid;
+    }
+
+    $manager = new schedule_manager();
+    $meetings = $DB->get_recordset('googlemeet', $conditions);
+    foreach ($meetings as $meeting) {
+        $manager->synchronise($meeting);
+    }
+    $meetings->close();
+
+    return true;
+}
+
+/**
+ * Provides the dashboard action for a meeting occurrence.
+ *
+ * @param calendar_event $event Calendar event.
+ * @param \core_calendar\action_factory $factory Action factory.
+ * @return \core_calendar\local\event\entities\action|null
+ */
+function mod_googlemeet_core_calendar_provide_event_action(
+    calendar_event $event,
+    \core_calendar\action_factory $factory
+) {
+    global $DB;
+
+    if (
+        $event->eventtype !== \mod_googlemeet\helper::GOOGLEMEET_EVENT_START ||
+        (int) $event->instance <= 0
+    ) {
+        return null;
+    }
+    if ((int) $event->timestart + max(0, (int) $event->timeduration) < time()) {
+        return null;
+    }
+    $meeting = $DB->get_record(
+        'googlemeet',
+        ['id' => (int) $event->instance],
+        'id, course, syncstatus',
+        IGNORE_MISSING
+    );
+    if ($meeting === false) {
+        return null;
+    }
+    $cm = get_coursemodule_from_instance(
+        'googlemeet',
+        (int) $meeting->id,
+        (int) $meeting->course,
+        false,
+        IGNORE_MISSING
+    );
+    if ($cm === false) {
+        return null;
+    }
+
+    return $factory->create_instance(
+        get_string('entertheroom', 'mod_googlemeet'),
+        new moodle_url('/mod/googlemeet/view.php', ['id' => (int) $cm->id]),
+        1,
+        $meeting->syncstatus === sync_state::READY
+    );
+}
+
+/**
+ * Meeting actions do not need a numeric item badge.
+ *
+ * @param calendar_event $event Calendar event.
+ * @param int $itemcount Action item count.
+ * @return bool
+ */
+function mod_googlemeet_core_calendar_event_action_shows_item_count(
+    calendar_event $event,
+    $itemcount = 0
+): bool {
+    return false;
 }
 
 /**

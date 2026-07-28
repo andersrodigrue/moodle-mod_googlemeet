@@ -40,4 +40,11 @@ final class lib_test extends \basic_testcase {
             \googlemeet_supports(FEATURE_MOD_PURPOSE)
         );
     }
+
+    /**
+     * Moodle can use the standard completion-on-view rule.
+     */
+    public function test_tracks_completion_by_view(): void {
+        $this->assertTrue(\googlemeet_supports(FEATURE_COMPLETION_TRACKS_VIEWS));
+    }
 }

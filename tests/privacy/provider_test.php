@@ -102,9 +102,11 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         ]);
         $this->context = \context_module::instance($this->meeting->cmid);
 
+        $eventdate = time();
         $this->eventid = $DB->insert_record('googlemeet_events', (object) [
             'googlemeetid' => $this->meeting->id,
-            'eventdate' => time(),
+            'occurrencekey' => hash('sha256', 'v1:' . $eventdate),
+            'eventdate' => $eventdate,
             'duration' => HOURSECS,
             'timemodified' => time(),
         ]);
