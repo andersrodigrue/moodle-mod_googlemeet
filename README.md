@@ -37,6 +37,10 @@ owner-only cancellation. Retry, reconnect and cancel commands are submitted thro
 session-protected POST actions; remote Calendar deletion is never triggered merely
 by deleting the Moodle activity.
 
+Moodle 5.2's centralized Activities page shows the meeting time, synchronization
+state and a safe primary action. Backups preserve portable scheduling settings but
+never clone OAuth ownership or remote Calendar identity into a restored activity.
+
 ## Security
 
 If you discover any security related issues, please email [ronefel@hotmail.com](mailto:ronefel@hotmail.com) instead of using the issue tracker.

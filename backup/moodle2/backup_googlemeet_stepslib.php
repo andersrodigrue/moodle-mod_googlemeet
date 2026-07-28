@@ -34,8 +34,6 @@ class backup_googlemeet_activity_structure_step extends backup_activity_structur
      * @return backup_nested_element The structure wrapped by the common 'activity' element.
      */
     protected function define_structure() {
-        $userinfo = $this->get_setting_value('userinfo');
-
         // Replace with the attributes and final elements that the element will handle.
         $googlemeet = new backup_nested_element('googlemeet', ['id'], [
             'name',
@@ -56,7 +54,15 @@ class backup_googlemeet_activity_structure_step extends backup_activity_structur
             'eventenddate',
             'notify',
             'minutesbefore',
-            'timemodified'
+            'timemodified',
+            'integrationmode',
+            'meetinguri',
+            'timestart',
+            'timeend',
+            'timezone',
+            'recurrence',
+            'sendupdates',
+            'timecreated',
         ]);
 
         $events = new backup_nested_element('events');

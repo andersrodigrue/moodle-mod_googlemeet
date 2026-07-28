@@ -227,6 +227,7 @@ function googlemeet_prepare_integration(
     if (
         $existing !== null &&
         $existing->integrationmode === integration_mode::MANAGED &&
+        (int) ($existing->owneruserid ?? 0) > 0 &&
         (int) $existing->owneruserid !== (int) $USER->id
     ) {
         throw new moodle_exception('managedowneronly', 'mod_googlemeet');

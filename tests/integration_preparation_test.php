@@ -190,4 +190,37 @@ final class integration_preparation_test extends \advanced_testcase {
         $this->expectException(\moodle_exception::class);
         \googlemeet_prepare_integration($data, $existing);
     }
+
+    /**
+     * A restored ownerless managed copy can be explicitly claimed.
+     */
+    public function test_restored_managed_meeting_can_be_claimed(): void {
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        set_config('issuerid', 17, 'googlemeet');
+
+        $client = $this->createMock(\core\oauth2\client::class);
+        $client->expects($this->once())->method('is_logged_in')->willReturn(true);
+        $manager = new oauth_manager(
+            static fn(int $issuerid) => new integration_preparation_issuer(),
+            static fn() => $client
+        );
+        $existing = (object) [
+            'integrationmode' => integration_mode::MANAGED,
+            'owneruserid' => null,
+            'url' => '',
+            'meetinguri' => null,
+        ];
+
+        $result = \googlemeet_prepare_integration(
+            (object) ['integrationmode' => integration_mode::MANAGED],
+            $existing,
+            $manager
+        );
+
+        $this->assertSame((int) $user->id, $result->owneruserid);
+        $this->assertSame(17, $result->oauthissuerid);
+        $this->assertSame('primary', $result->calendarid);
+    }
 }

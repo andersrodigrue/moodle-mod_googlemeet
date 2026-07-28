@@ -202,9 +202,37 @@ Deleting the Moodle activity still removes local data only. Remote cancellation 
 an explicit teacher command so ordinary course cleanup cannot silently delete an
 external Calendar event.
 
+## Moodle 5.2 overview and portable restore
+
+The seventh structural slice integrates the activity with Moodle's centralized
+course overview and defines safe backup semantics:
+
+- `classes/courseformat/overview.php` implements the Moodle 5.2 activity overview
+  contract;
+- the overview displays the meeting start through Moodle's human-date renderable,
+  the normalized synchronization state and a primary action;
+- ready meetings expose a validated Google Meet join action, while every other
+  state links to the local activity status page;
+- the legacy module `index.php` now redirects to the centralized Activities page;
+- backup transports schedule, timezone, recurrence, notification policy and
+  integration mode;
+- backup deliberately excludes OAuth ownership, issuer IDs, Calendar event IDs,
+  conference identifiers, request IDs and operational errors;
+- restored manual meetings retain their explicit link and settle as `ready`;
+- restored managed meetings retain schedule settings but become ownerless and
+  `disconnected`, with no join URI or remote identity;
+- an authorized teacher can explicitly claim an ownerless restored managed copy,
+  which will create a distinct event for the new activity;
+- remote recordings continue to use the legacy backup behavior and remain outside
+  the managed Calendar authorization.
+
+These rules prevent a duplicated course or imported backup from controlling the
+same external event as its source.
+
 ## Next structural slice
 
-The next slice should implement the Moodle 5.2 activity overview integration and
-extend backup/restore tests for the managed lifecycle. The remaining legacy Drive
-recording flows should then move away from the broad combined OAuth client without
-silently adding Drive scopes to the managed Calendar authorization.
+The next slice should isolate the remaining legacy Drive recording flow from the
+managed Calendar client. It must preserve explicit consent and avoid silently
+adding Drive scopes to the per-teacher Calendar authorization. Activity deletion,
+privacy exports and recovery behavior should be reviewed again after that boundary
+is separated.

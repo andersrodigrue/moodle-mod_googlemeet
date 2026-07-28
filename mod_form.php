@@ -336,6 +336,7 @@ class mod_googlemeet_mod_form extends moodleform_mod {
             if (
                 !empty($this->current->instance) &&
                 ($this->current->integrationmode ?? null) === integration_mode::MANAGED &&
+                (int) ($this->current->owneruserid ?? 0) > 0 &&
                 (int) ($this->current->owneruserid ?? 0) !== (int) $USER->id
             ) {
                 $errors['integrationmode'] = get_string('managedowneronly', 'googlemeet');
