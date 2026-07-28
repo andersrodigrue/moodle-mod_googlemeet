@@ -19,6 +19,7 @@ namespace mod_googlemeet;
 use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\recording_sync_state;
 use mod_googlemeet\local\sync_state;
+use PHPUnit\Framework\Attributes\CoversClass;
 use restore_date_testcase;
 
 defined('MOODLE_INTERNAL') || die();
@@ -33,11 +34,11 @@ require_once($CFG->libdir . '/phpunit/classes/restore_date_testcase.php');
  * @category    test
  * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers      \backup_googlemeet_activity_task
- * @covers      \restore_googlemeet_activity_task
- * @covers      \backup_googlemeet_activity_structure_step
- * @covers      \restore_googlemeet_activity_structure_step
  */
+#[CoversClass(\backup_googlemeet_activity_task::class)]
+#[CoversClass(\restore_googlemeet_activity_task::class)]
+#[CoversClass(\backup_googlemeet_activity_structure_step::class)]
+#[CoversClass(\restore_googlemeet_activity_structure_step::class)]
 final class backup_restore_test extends restore_date_testcase {
 
     /**

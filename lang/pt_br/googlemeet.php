@@ -248,7 +248,7 @@ $string['recordingsqueued'] = 'A descoberta de gravações foi enfileirada.';
 $string['recordingsresponseinvalid'] = 'O Google Meet retornou uma resposta de gravação inválida.';
 $string['recordingsstateskipped'] = 'A descoberta de gravações ignorou a atividade {$a->id} no estado {$a->state}.';
 $string['recordingssync'] = 'Descobrir gravações';
-$string['recordingsynced'] = 'A descoberta de gravações foi concluída para a atividade {$a->id}: {$a->count} '
+$string['recordingssynced'] = 'A descoberta de gravações foi concluída para a atividade {$a->id}: {$a->count} '
     . 'artefato(s) gerado(s) encontrado(s).';
 $string['recordingsyncstatus'] = 'Estado da descoberta de gravações';
 $string['recordingsyncstatusdisconnected'] = 'Desconectada';
