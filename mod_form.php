@@ -25,6 +25,9 @@
 defined('MOODLE_INTERNAL') || die();
 
 use mod_googlemeet\api\calendar_authorization_exception;
+use mod_googlemeet\api\calendar_guest_limit_exception;
+use mod_googlemeet\local\calendar_guest_policy;
+use mod_googlemeet\local\calendar_guest_resolver;
 use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\meeting_form_data;
 use mod_googlemeet\local\oauth_manager;
@@ -131,6 +134,31 @@ class mod_googlemeet_mod_form extends moodleform_mod {
         }
         $mform->addElement('static', 'managedoauthstatus', get_string('managedoauth', 'googlemeet'), $oauthstatus);
         $mform->hideIf('managedoauthstatus', 'integrationmode', 'neq', integration_mode::MANAGED);
+
+        $mform->addElement(
+            'select',
+            'guestpolicy',
+            get_string('guestpolicy', 'googlemeet'),
+            [
+                calendar_guest_policy::NONE => get_string('guestpolicynone', 'googlemeet'),
+                calendar_guest_policy::COURSE => get_string('guestpolicycourse', 'googlemeet'),
+            ]
+        );
+        $mform->setDefault('guestpolicy', calendar_guest_policy::NONE);
+        $mform->addHelpButton('guestpolicy', 'guestpolicy', 'googlemeet');
+        $mform->hideIf('guestpolicy', 'integrationmode', 'neq', integration_mode::MANAGED);
+        $mform->addElement(
+            'static',
+            'guestpolicywarning',
+            '',
+            $OUTPUT->notification(get_string(
+                'guestpolicywarning',
+                'googlemeet',
+                calendar_guest_resolver::MAX_ATTENDEES
+            ), 'warning')
+        );
+        $mform->hideIf('guestpolicywarning', 'integrationmode', 'neq', integration_mode::MANAGED);
+        $mform->hideIf('guestpolicywarning', 'guestpolicy', 'neq', calendar_guest_policy::COURSE);
 
         $mform->addElement('header', 'headerschedule', get_string('meetingschedule', 'googlemeet'));
         $scheduletimezone = $this->schedule_timezone();
@@ -420,6 +448,23 @@ class mod_googlemeet_mod_form extends moodleform_mod {
                     }
                 } catch (calendar_authorization_exception | moodle_exception) {
                     $errors['integrationmode'] = get_string('managedoauthunavailable', 'googlemeet');
+                }
+            }
+            $guestpolicy = (string) ($data['guestpolicy'] ?? calendar_guest_policy::NONE);
+            if (!calendar_guest_policy::is_valid($guestpolicy)) {
+                $errors['guestpolicy'] = get_string('invalidguestpolicy', 'googlemeet');
+            } else if ($guestpolicy === calendar_guest_policy::COURSE) {
+                try {
+                    $context = !empty($this->_cm)
+                        ? context_module::instance((int) $this->_cm->id)
+                        : context_course::instance((int) $COURSE->id);
+                    (new calendar_guest_resolver())->resolve_context($context, (int) $USER->id);
+                } catch (calendar_guest_limit_exception) {
+                    $errors['guestpolicy'] = get_string(
+                        'guestlimitexceeded',
+                        'googlemeet',
+                        calendar_guest_resolver::MAX_ATTENDEES
+                    );
                 }
             }
         } else {

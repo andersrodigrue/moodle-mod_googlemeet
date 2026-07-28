@@ -16,6 +16,9 @@
 
 namespace mod_googlemeet\api;
 
+use mod_googlemeet\local\calendar_guest_policy;
+use mod_googlemeet\local\calendar_guest_resolver;
+use mod_googlemeet\local\calendar_guest_snapshot;
 use mod_googlemeet\local\integration_mode;
 
 /**
@@ -37,13 +40,6 @@ final class calendar_adapter {
     /** Google Calendar conference solution type for Meet. */
     private const CONFERENCE_TYPE = 'hangoutsMeet';
 
-    /** Accepted Calendar guest notification policies. */
-    private const SEND_UPDATES = [
-        'all',
-        'externalOnly',
-        'none',
-    ];
-
     /** @var calendar_client Calendar transport. */
     private calendar_client $client;
 
@@ -63,10 +59,29 @@ final class calendar_adapter {
      * Creates, updates, or polls one managed Calendar event.
      *
      * @param \stdClass $meeting Google Meet activity record.
+     * @param calendar_guest_snapshot|null $guests Desired Moodle-managed guests.
+     * @param array<string, bool> $previousguesthashes Previously managed email hashes.
      * @return calendar_event_result
      */
-    public function synchronise(\stdClass $meeting): calendar_event_result {
+    public function synchronise(
+        \stdClass $meeting,
+        ?calendar_guest_snapshot $guests = null,
+        array $previousguesthashes = []
+    ): calendar_event_result {
         $this->validate_meeting($meeting);
+        $guestpolicy = (string) ($meeting->guestpolicy ?? calendar_guest_policy::NONE);
+        $guests ??= $guestpolicy === calendar_guest_policy::NONE
+            ? calendar_guest_snapshot::none()
+            : throw new calendar_configuration_exception(
+                'A managed Calendar guest snapshot is required.'
+            );
+        if (
+            ($guestpolicy === calendar_guest_policy::COURSE) !== $guests->is_managed()
+        ) {
+            throw new calendar_configuration_exception(
+                'The Calendar guest snapshot does not match the stored policy.'
+            );
+        }
 
         $googlemeetid = (int) $meeting->id;
         $calendarid = trim((string) $meeting->calendarid);
@@ -88,9 +103,13 @@ final class calendar_adapter {
         }
 
         $this->validate_identifiers($eventid, $requestid);
+        $guestschanged = $guests->hash() !== ($meeting->guesthash ?? null);
 
         if ($persistedeventid === '') {
-            $event = $this->event_body($meeting);
+            $event = $this->event_body(
+                $meeting,
+                $guests->is_managed() ? $guests->event_attendees() : null
+            );
             $event['id'] = $eventid;
             $event['conferenceData'] = $this->conference_create_request($requestid);
 
@@ -98,7 +117,14 @@ final class calendar_adapter {
                 $response = $this->client->insert_event(
                     $calendarid,
                     $event,
-                    $this->mutation_parameters((string) $meeting->sendupdates)
+                    $this->mutation_parameters(
+                        $this->send_updates(
+                            $meeting,
+                            $guests,
+                            $previousguesthashes,
+                            $guests->count() > 0
+                        )
+                    )
                 );
             } catch (calendar_event_exists_exception $e) {
                 $response = $this->client->get_event($calendarid, $eventid);
@@ -114,6 +140,15 @@ final class calendar_adapter {
         }
 
         $event = $this->event_body($meeting);
+        if ($guestschanged) {
+            $currentevent = $this->client->get_event($calendarid, $eventid);
+            $event['attendees'] = $this->reconcile_attendees(
+                $currentevent,
+                $guests,
+                $previousguesthashes
+            );
+            $this->add_guest_permissions($event);
+        }
         if (empty($meeting->meetinguri)) {
             $event['conferenceData'] = $this->conference_create_request($requestid);
         }
@@ -121,7 +156,14 @@ final class calendar_adapter {
             $calendarid,
             $eventid,
             $event,
-            $this->mutation_parameters((string) $meeting->sendupdates)
+            $this->mutation_parameters(
+                $this->send_updates(
+                    $meeting,
+                    $guests,
+                    $previousguesthashes,
+                    $guestschanged
+                )
+            )
         );
 
         return calendar_event_result::from_response($response, $eventid, $requestid);
@@ -148,7 +190,11 @@ final class calendar_adapter {
         $this->client->delete_event(
             trim((string) $meeting->calendarid),
             $eventid,
-            ['sendUpdates' => (string) $meeting->sendupdates]
+            [
+                'sendUpdates' => (int) ($meeting->guestcount ?? 0) > 0
+                    ? 'all'
+                    : 'none',
+            ]
         );
     }
 
@@ -156,9 +202,10 @@ final class calendar_adapter {
      * Builds the mutable event fields.
      *
      * @param \stdClass $meeting Google Meet activity record.
+     * @param array<int, array{email: string}>|null $attendees Managed attendees, or null to omit the field.
      * @return array<string, mixed>
      */
-    private function event_body(\stdClass $meeting): array {
+    private function event_body(\stdClass $meeting, ?array $attendees = null): array {
         $timezone = new \DateTimeZone((string) $meeting->timezone);
         $start = (new \DateTimeImmutable('@' . (int) $meeting->timestart))
             ->setTimezone($timezone)
@@ -183,8 +230,150 @@ final class calendar_adapter {
         if ($recurrence !== []) {
             $event['recurrence'] = $recurrence;
         }
+        if ($attendees !== null) {
+            $event['attendees'] = $attendees;
+            $this->add_guest_permissions($event);
+        }
 
         return $event;
+    }
+
+    /**
+     * Applies conservative attendee permissions to an event payload.
+     *
+     * @param array<string, mixed> $event Event payload.
+     */
+    private function add_guest_permissions(array &$event): void {
+        $event['guestsCanInviteOthers'] = false;
+        $event['guestsCanModify'] = false;
+        $event['guestsCanSeeOtherGuests'] = false;
+    }
+
+    /**
+     * Reconciles Moodle-managed attendees while preserving manual Calendar guests.
+     *
+     * Array fields replace the complete remote array. The previous local hashes
+     * therefore identify only attendees Moodle is allowed to remove. Other
+     * attendees and existing RSVP state are retained.
+     *
+     * @param array<string, mixed> $currentevent Current Calendar event resource.
+     * @param calendar_guest_snapshot $desired Desired managed snapshot.
+     * @param array<string, bool> $previousguesthashes Previously managed email hashes.
+     * @return array<int, array<string, mixed>>
+     */
+    private function reconcile_attendees(
+        array $currentevent,
+        calendar_guest_snapshot $desired,
+        array $previousguesthashes
+    ): array {
+        if (!empty($currentevent['attendeesOmitted'])) {
+            throw new calendar_response_exception(
+                'Google Calendar omitted attendees required for safe reconciliation.'
+            );
+        }
+        $currentattendees = $currentevent['attendees'] ?? [];
+        if (!is_array($currentattendees)) {
+            throw new calendar_response_exception('Google Calendar returned invalid attendees.');
+        }
+
+        $desiredguests = $desired->guests();
+        $reconciled = [];
+        foreach ($currentattendees as $attendee) {
+            if (!is_array($attendee)) {
+                throw new calendar_response_exception('Google Calendar returned an invalid attendee.');
+            }
+            if (!empty($attendee['organizer']) || !empty($attendee['self'])) {
+                continue;
+            }
+
+            $email = calendar_guest_snapshot::normalize_email((string) ($attendee['email'] ?? ''));
+            if ($email === '' || !validate_email($email)) {
+                throw new calendar_response_exception('Google Calendar returned an invalid attendee email.');
+            }
+            $emailhash = calendar_guest_snapshot::email_hash($email);
+            if (isset($previousguesthashes[$emailhash]) && !isset($desiredguests[$email])) {
+                continue;
+            }
+            $reconciled[$email] = $this->preserved_attendee($attendee, $email);
+        }
+
+        foreach ($desiredguests as $email => $guest) {
+            if (!isset($reconciled[$email])) {
+                $reconciled[$email] = ['email' => $guest['email']];
+            }
+        }
+        ksort($reconciled, SORT_STRING);
+        if (count($reconciled) > calendar_guest_resolver::MAX_ATTENDEES) {
+            throw new calendar_guest_limit_exception(
+                'The Calendar event contains too many attendees for safe reconciliation.'
+            );
+        }
+
+        return array_values($reconciled);
+    }
+
+    /**
+     * Preserves writable attendee state without echoing read-only or sensitive fields.
+     *
+     * @param array<string, mixed> $attendee Calendar attendee.
+     * @param string $email Normalized email.
+     * @return array<string, mixed>
+     */
+    private function preserved_attendee(array $attendee, string $email): array {
+        $preserved = ['email' => $email];
+        if (in_array(
+            ($attendee['responseStatus'] ?? null),
+            ['needsAction', 'declined', 'tentative', 'accepted'],
+            true
+        )) {
+            $preserved['responseStatus'] = $attendee['responseStatus'];
+        }
+        foreach (['optional', 'resource'] as $booleanfield) {
+            if (isset($attendee[$booleanfield]) && is_bool($attendee[$booleanfield])) {
+                $preserved[$booleanfield] = $attendee[$booleanfield];
+            }
+        }
+        if (
+            isset($attendee['additionalGuests'])
+            && is_int($attendee['additionalGuests'])
+            && $attendee['additionalGuests'] >= 0
+        ) {
+            $preserved['additionalGuests'] = $attendee['additionalGuests'];
+        }
+
+        return $preserved;
+    }
+
+    /**
+     * Selects a notification policy from guest state, never from raw form data.
+     *
+     * Removing the last managed attendees still uses `all` so removed guests
+     * receive the Calendar cancellation/update for their attendee copy.
+     *
+     * @param \stdClass $meeting Activity record.
+     * @param calendar_guest_snapshot $guests Desired snapshot.
+     * @param array<string, bool> $previousguesthashes Previously managed hashes.
+     * @param bool $guestschanged Whether this mutation changes managed attendees.
+     * @return string
+     */
+    private function send_updates(
+        \stdClass $meeting,
+        calendar_guest_snapshot $guests,
+        array $previousguesthashes,
+        bool $guestschanged
+    ): string {
+        if (
+            $guestschanged
+            && (
+                $guests->count() > 0
+                || $previousguesthashes !== []
+                || (int) ($meeting->guestcount ?? 0) > 0
+            )
+        ) {
+            return 'all';
+        }
+
+        return 'none';
     }
 
     /**
@@ -273,8 +462,9 @@ final class calendar_adapter {
         if ($requireeventdata && (int) ($meeting->timeend ?? 0) <= (int) $meeting->timestart) {
             throw new calendar_configuration_exception('The meeting end time must be after its start time.');
         }
-        if (!in_array((string) ($meeting->sendupdates ?? ''), self::SEND_UPDATES, true)) {
-            throw new calendar_configuration_exception('The Calendar sendUpdates policy is invalid.');
+        $guestpolicy = (string) ($meeting->guestpolicy ?? calendar_guest_policy::NONE);
+        if (!calendar_guest_policy::is_valid($guestpolicy)) {
+            throw new calendar_configuration_exception('The Calendar guest policy is invalid.');
         }
 
         if ($requireeventdata) {

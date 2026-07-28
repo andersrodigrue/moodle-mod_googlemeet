@@ -373,6 +373,56 @@ final class meeting_manager_test extends \advanced_testcase {
     }
 
     /**
+     * A Calendar mutation persists a privacy-declared managed guest receipt.
+     */
+    public function test_managed_meeting_persists_resolved_course_guests(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $owner = $generator->create_and_enrol($course, 'editingteacher');
+        $student = $generator->create_and_enrol($course, 'student');
+        $meeting = $generator->get_plugin_generator('mod_googlemeet')->create_instance([
+            'course' => $course->id,
+            'integrationmode' => integration_mode::MANAGED,
+            'owneruserid' => $owner->id,
+            'calendarid' => 'primary',
+            'meetinguri' => null,
+            'timezone' => 'America/Sao_Paulo',
+            'guestpolicy' => calendar_guest_policy::COURSE,
+            'sendupdates' => 'all',
+            'syncstatus' => sync_state::QUEUED,
+        ]);
+        $identity = new calendar_identity('https://moodle.example.test');
+        $eventid = $identity->event_id((int) $meeting->id);
+        $requestid = $identity->request_id((int) $meeting->id, $eventid);
+        $client = new meeting_manager_calendar_client();
+        $client->response = $this->calendar_response(
+            $eventid,
+            $requestid,
+            calendar_event_result::PENDING
+        );
+
+        $this->expectOutputString(
+            get_string('syncmanagedpending', 'mod_googlemeet', $meeting->id) . "\n"
+        );
+        (new meeting_manager(
+            calendaradapter: new calendar_adapter($client, $identity)
+        ))->process((int) $meeting->id);
+
+        $updated = $DB->get_record('googlemeet', ['id' => $meeting->id], '*', MUST_EXIST);
+        $this->assertSame(1, (int) $updated->guestcount);
+        $this->assertSame('all', $updated->sendupdates);
+        $this->assertNotNull($updated->guesthash);
+        $receipt = $DB->get_record('googlemeet_calendar_guests', [
+            'googlemeetid' => $meeting->id,
+            'userid' => $student->id,
+        ], '*', MUST_EXIST);
+        $this->assertSame(64, strlen($receipt->emailhash));
+    }
+
+    /**
      * Polling a managed pending event can complete the conference.
      */
     public function test_managed_pending_meeting_becomes_ready(): void {

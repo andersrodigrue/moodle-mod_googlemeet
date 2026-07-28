@@ -75,6 +75,10 @@ class provider implements
                 'lasterrorcode' => 'privacy:metadata:googlemeet:lasterrorcode',
                 'lasterrormessage' => 'privacy:metadata:googlemeet:lasterrormessage',
                 'timelastattempt' => 'privacy:metadata:googlemeet:timelastattempt',
+                'guesthash' => 'privacy:metadata:googlemeet:guesthash',
+                'guestcount' => 'privacy:metadata:googlemeet:guestcount',
+                'guesttimelastsync' => 'privacy:metadata:googlemeet:guesttimelastsync',
+                'guesttimechecked' => 'privacy:metadata:googlemeet:guesttimechecked',
                 'recordingowneruserid' => 'privacy:metadata:googlemeet:recordingowneruserid',
                 'recordingoauthissuerid' => 'privacy:metadata:googlemeet:recordingoauthissuerid',
                 'recordingsyncstatus' => 'privacy:metadata:googlemeet:recordingsyncstatus',
@@ -84,6 +88,15 @@ class provider implements
                 'recordingtimelastattempt' => 'privacy:metadata:googlemeet:recordingtimelastattempt',
             ],
             'privacy:metadata:googlemeet'
+        );
+        $collection->add_database_table(
+            'googlemeet_calendar_guests',
+            [
+                'userid' => 'privacy:metadata:googlemeet_calendar_guests:userid',
+                'emailhash' => 'privacy:metadata:googlemeet_calendar_guests:emailhash',
+                'timemodified' => 'privacy:metadata:googlemeet_calendar_guests:timemodified',
+            ],
+            'privacy:metadata:googlemeet_calendar_guests'
         );
         $collection->add_database_table(
             'googlemeet_recordings',
@@ -115,6 +128,7 @@ class provider implements
                 'timezone' => 'privacy:metadata:google_calendar:timezone',
                 'recurrence' => 'privacy:metadata:google_calendar:recurrence',
                 'conference' => 'privacy:metadata:google_calendar:conference',
+                'attendees' => 'privacy:metadata:google_calendar:attendees',
             ],
             'privacy:metadata:google_calendar'
         );
@@ -151,6 +165,7 @@ class provider implements
             'calendarowner' => $userid,
             'recordingowner' => $userid,
             'notificationuser' => $userid,
+            'calendarattendee' => $userid,
         ];
         if ($email !== '') {
             $emailcondition = $DB->sql_equal('g.creatoremail', ':legacyemail', false);
@@ -170,6 +185,12 @@ class provider implements
                  WHERE g.owneruserid = :calendarowner
                     OR g.recordingowneruserid = :recordingowner
                     OR {$emailcondition}
+                    OR EXISTS (
+                           SELECT 1
+                             FROM {googlemeet_calendar_guests} gcg
+                            WHERE gcg.googlemeetid = g.id
+                              AND gcg.userid = :calendarattendee
+                       )
                     OR EXISTS (
                            SELECT 1
                              FROM {googlemeet_events} ge
@@ -212,6 +233,19 @@ class provider implements
                 . ' WHERE cm.id = :cmid AND g.owneruserid IS NOT NULL',
             $baseparams
         );
+        $guestparams = [
+            'guestcmid' => $context->instanceid,
+            'guestmodule' => 'googlemeet',
+        ];
+        $guestsql = "SELECT gcg.userid
+                       FROM {course_modules} cm
+                       JOIN {modules} m
+                         ON m.id = cm.module
+                        AND m.name = :guestmodule
+                       JOIN {googlemeet} g ON g.id = cm.instance
+                       JOIN {googlemeet_calendar_guests} gcg ON gcg.googlemeetid = g.id
+                      WHERE cm.id = :guestcmid";
+        $userlist->add_from_sql('userid', $guestsql, $guestparams);
         $userlist->add_from_sql(
             'userid',
             'SELECT g.recordingowneruserid AS userid' . $basejoin
@@ -275,8 +309,15 @@ class provider implements
             $isrecordingowner = (int) ($meeting->recordingowneruserid ?? 0) === (int) $user->id;
             $islegacycreator = self::same_email((string) ($meeting->creatoremail ?? ''), (string) $user->email);
             $notifications = self::notification_export_data($googlemeetid, (int) $user->id);
+            $guestdata = self::guest_export_data($googlemeetid, (int) $user->id);
 
-            if (!$iscalendarowner && !$isrecordingowner && !$islegacycreator && !$notifications) {
+            if (
+                !$iscalendarowner
+                && !$isrecordingowner
+                && !$islegacycreator
+                && !$notifications
+                && $guestdata === null
+            ) {
                 continue;
             }
 
@@ -306,6 +347,10 @@ class provider implements
                         'lasterrorcode' => $meeting->lasterrorcode,
                         'lasterrormessage' => $meeting->lasterrormessage,
                         'timelastattempt' => self::export_datetime($meeting->timelastattempt),
+                        'guestpolicy' => $meeting->guestpolicy,
+                        'guestcount' => (int) $meeting->guestcount,
+                        'guesttimelastsync' => self::export_datetime($meeting->guesttimelastsync),
+                        'guesttimechecked' => self::export_datetime($meeting->guesttimechecked),
                     ];
                 }
                 writer::with_context($context)->export_data(
@@ -351,6 +396,12 @@ class provider implements
                 writer::with_context($context)->export_data(
                     [get_string('privacy:path:notifications', 'mod_googlemeet')],
                     (object) ['notifications' => $notifications]
+                );
+            }
+            if ($guestdata !== null) {
+                writer::with_context($context)->export_data(
+                    [get_string('privacy:path:calendarattendee', 'mod_googlemeet')],
+                    $guestdata
                 );
             }
         }
@@ -450,6 +501,28 @@ class provider implements
             $record->timesent = transform::datetime((int) $record->timesent);
         }
         return $records;
+    }
+
+    /**
+     * Returns one user's local managed-attendee receipt.
+     *
+     * @param int $googlemeetid Activity instance ID.
+     * @param int $userid User ID.
+     * @return \stdClass|null
+     */
+    private static function guest_export_data(int $googlemeetid, int $userid): ?\stdClass {
+        global $DB;
+
+        $record = $DB->get_record('googlemeet_calendar_guests', [
+            'googlemeetid' => $googlemeetid,
+            'userid' => $userid,
+        ], 'userid, emailhash, timemodified', IGNORE_MISSING);
+        if (!$record) {
+            return null;
+        }
+        $record->timemodified = transform::datetime((int) $record->timemodified);
+
+        return $record;
     }
 
     /**

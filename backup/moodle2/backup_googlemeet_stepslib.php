@@ -50,7 +50,6 @@ class backup_googlemeet_activity_structure_step extends backup_activity_structur
             'timeend',
             'timezone',
             'recurrence',
-            'sendupdates',
             'timecreated',
         ]);
 

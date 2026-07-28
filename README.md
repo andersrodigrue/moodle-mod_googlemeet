@@ -95,6 +95,20 @@ temporarily available only so older installations and backups can be converted.
 Imported recurrence exceptions that cannot be represented by the weekly editor are
 preserved read-only rather than silently simplified.
 
+Calendar invitations are disabled by default. A teacher can explicitly choose to
+invite active course participants who have the
+`mod/googlemeet:receivecalendarinvite` capability. The plugin applies a hard
+limit of 200 unique attendees and aborts instead of sending a partial list. It
+preserves guests added directly in Google Calendar and their RSVP status, stores
+only Moodle user IDs and normalized one-way email hashes, and reconciles
+enrolment changes in bounded background batches. Google sends attendee updates
+only for an initial invitation, an actual membership change, or cancellation;
+ordinary meeting edits do not repeat invitation email.
+
+Guest receipts and the invitation policy are excluded from backup and reset on
+restore. They are declared to Moodle's Privacy API and can be exported or
+deleted without making an unexpected remote Calendar request.
+
 ## Security
 
 If you discover any security related issues, please email [ronefel@hotmail.com](mailto:ronefel@hotmail.com) instead of using the issue tracker.

@@ -58,6 +58,7 @@ $string['from'] = 'das';
 $string['googlemeet:addinstance'] = 'Adicionar novo Google Meet™ para Moodle';
 $string['googlemeet:editrecording'] = 'Editar as gravações';
 $string['googlemeet:managemeeting'] = 'Gerenciar a reunião do Google Agenda';
+$string['googlemeet:receivecalendarinvite'] = 'Receber convites de reunião do Google Agenda';
 $string['googlemeet:receivenotification'] = 'Receber lembretes de reunião';
 $string['googlemeet:removerecording'] = 'Remover as gravações';
 $string['googlemeet:syncgoogledrive'] = 'Descobrir gravações do Google Meet';
@@ -68,6 +69,7 @@ $string['invalideventenddate'] = 'O término da recorrência não pode ser anter
 $string['invalideventendtime'] = 'O horário de término deve ser maior que o horário de início';
 $string['invalidissuerid'] = 'O serviço OAuth selecionado nas configurações do "Google Meet™ para Moodle" não é suportado pelo Google';
 $string['invalidintegrationmode'] = 'Selecione um modo de integração de reunião compatível.';
+$string['invalidguestpolicy'] = 'Selecione uma política de convites do Google Agenda compatível.';
 $string['invalidmeetingtimezone'] = 'Selecione um fuso horário IANA válido.';
 $string['invalidrecurrenceinterval'] = 'O intervalo da recorrência deve ficar entre 1 e 36 semanas.';
 $string['invalidschedule'] = 'A agenda da reunião é inválida. Revise as datas, o fuso horário e a recorrência.';
@@ -82,6 +84,16 @@ $string['integrationmode_help'] = 'O modo gerenciado cria e reconcilia o evento 
     . 'do Agenda.';
 $string['integrationmodemanaged'] = 'Criar e gerenciar com o Google Agenda';
 $string['integrationmodemanual'] = 'Usar um link existente do Google Meet';
+$string['guestlimitexceeded'] = 'Esta atividade pode convidar no máximo {$a} participantes ativos. Reduza as '
+    . 'matrículas elegíveis ou mantenha os convites do Google Agenda desativados.';
+$string['guestpolicy'] = 'Convites do Google Agenda';
+$string['guestpolicy_help'] = 'Escolha explicitamente se usuários com matrícula ativa e a capability de convite '
+    . 'devem se tornar participantes do evento no Google Agenda. Convites, atualizações e remoções podem enviar e-mail.';
+$string['guestpolicycourse'] = 'Convidar participantes ativos do curso';
+$string['guestpolicynone'] = 'Não adicionar participantes do curso ao Google Agenda';
+$string['guestpolicywarning'] = 'Salvar esta opção pode enviar e-mail do Google Agenda para até {$a} participantes '
+    . 'ativos. O Moodle reconcilia somente usuários com a capability específica de convite e nunca envia uma lista '
+    . 'parcial acima desse limite.';
 $string['jstableinfo'] = 'Mostrando {start} a {end} de {rows} gravações';
 $string['jstableinfofiltered'] = 'Mostrando {start} a {end} de {rows} gravações (filtrado de {rowsTotal} gravações)';
 $string['jstableloading'] = 'Carregando...';
@@ -152,6 +164,8 @@ $string['privacy:metadata:google_calendar'] = 'Uma conta conectada pelo professo
     . 'ao Google Agenda.';
 $string['privacy:metadata:google_calendar:authorizedaccount'] = 'A conta Google autorizada pelo professor.';
 $string['privacy:metadata:google_calendar:conference'] = 'A solicitação de criação de uma conferência do Google Meet.';
+$string['privacy:metadata:google_calendar:attendees'] = 'Os endereços de e-mail dos participantes ativos do curso '
+    . 'selecionados explicitamente como convidados do Google Agenda.';
 $string['privacy:metadata:google_calendar:recurrence'] = 'A regra de recorrência do evento.';
 $string['privacy:metadata:google_calendar:schedule'] = 'O início e o término do evento.';
 $string['privacy:metadata:google_calendar:summary'] = 'O nome da atividade Moodle usado como título do evento.';
@@ -193,6 +207,17 @@ $string['privacy:metadata:googlemeet:requestid'] = 'O identificador de idempotê
 $string['privacy:metadata:googlemeet:syncattempts'] = 'O número de tentativas de sincronização com o Google Agenda.';
 $string['privacy:metadata:googlemeet:syncstatus'] = 'O estado da sincronização com o Google Agenda.';
 $string['privacy:metadata:googlemeet:timelastattempt'] = 'O horário da última tentativa de sincronização com o Google Agenda.';
+$string['privacy:metadata:googlemeet:guestcount'] = 'A quantidade de convidados gerenciados na última atualização do '
+    . 'Google Agenda.';
+$string['privacy:metadata:googlemeet:guesthash'] = 'Um hash estável do último conjunto gerenciado de convidados.';
+$string['privacy:metadata:googlemeet:guesttimechecked'] = 'O horário da última verificação de participantes elegíveis.';
+$string['privacy:metadata:googlemeet:guesttimelastsync'] = 'O horário da última alteração dos convidados gerenciados.';
+$string['privacy:metadata:googlemeet_calendar_guests'] = 'Armazena o comprovante local limitado dos convidados '
+    . 'gerenciados a partir de matrículas ativas no Moodle.';
+$string['privacy:metadata:googlemeet_calendar_guests:emailhash'] = 'Um hash normalizado e unidirecional do e-mail do '
+    . 'convidado.';
+$string['privacy:metadata:googlemeet_calendar_guests:timemodified'] = 'O horário de alteração do comprovante do convidado.';
+$string['privacy:metadata:googlemeet_calendar_guests:userid'] = 'O usuário Moodle representado pelo convidado gerenciado.';
 $string['privacy:metadata:googlemeet_notify_done'] = 'Armazena comprovantes dos lembretes de reunião enviados aos usuários.';
 $string['privacy:metadata:googlemeet_notify_done:eventid'] = 'O evento local associado ao lembrete.';
 $string['privacy:metadata:googlemeet_notify_done:timesent'] = 'O horário em que o lembrete foi enviado.';
@@ -208,6 +233,7 @@ $string['privacy:metadata:googlemeet_recordings:visible'] = 'Se a gravação est
 $string['privacy:metadata:googlemeet_recordings:webviewlink'] = 'O link de reprodução no Google Drive retornado pelo '
     . 'Google Meet.';
 $string['privacy:path:calendar'] = 'Autorização e sincronização com o Google Agenda';
+$string['privacy:path:calendarattendee'] = 'Convite gerenciado do Google Agenda';
 $string['privacy:path:notifications'] = 'Comprovantes dos lembretes da reunião';
 $string['privacy:path:recordingauthorization'] = 'Autorização das gravações do Google Meet';
 $string['privacy:path:recordings'] = 'Referências compartilhadas descobertas com sua autorização';
@@ -216,6 +242,9 @@ $string['recordings'] = 'Gravações';
 $string['recordingswiththename'] = 'Gravações com o nome:';
 $string['reconcilependingresult'] = 'A reconciliação do Google Agenda encontrou {$a->found} reunião(ões) e enfileirou {$a->queued}.';
 $string['reconcilependingtask'] = 'Reconciliar conferências pendentes do Google Meet';
+$string['reconcileguestsresult'] = 'A verificação de convidados analisou {$a->found} reunião(ões), enfileirou '
+    . '{$a->queued} e encontrou {$a->unchanged} sem alterações.';
+$string['reconcilegueststask'] = 'Reconciliar convidados do Google Agenda';
 $string['recurrenceeventdate'] = 'Recorrência da reunião';
 $string['recurrenceeventdate_help'] = 'Ative a recorrência semanal, selecione um ou mais dias, escolha um intervalo de '
     . '1 a 36 semanas e defina o limite inclusivo da recorrência. A série pode abranger no máximo um ano.';
@@ -247,6 +276,8 @@ $string['synccalendarcancelapifailed'] = 'O Google Agenda rejeitou permanentemen
 $string['synccalendarapifailed'] = 'O Google Agenda rejeitou permanentemente a solicitação de sincronização.';
 $string['synccalendarconfigurationinvalid'] = 'A configuração da integração gerenciada com o Google Agenda é inválida.';
 $string['synccalendarresponseinvalid'] = 'O Google Agenda retornou um evento incompleto ou inconsistente.';
+$string['syncguestlimitexceeded'] = 'Os convites do Google Agenda são limitados a {$a} participantes para que o Moodle '
+    . 'nunca envie uma lista parcial ou inesperadamente grande.';
 $string['syncconferencecreationfailed'] = 'O Google Agenda não conseguiu criar a conferência do Google Meet.';
 $string['synccancel'] = 'Cancelar reunião';
 $string['synccancelqueued'] = 'O cancelamento da reunião foi enfileirado.';
@@ -262,6 +293,7 @@ $string['syncmanagedconfigurationfailed'] = 'A atividade Google Meet {$a} tem um
 $string['syncmanageddeferred'] = 'A atividade Google Meet {$a} aguarda o adaptador gerenciado do Google Agenda.';
 $string['syncmanageddisconnected'] = 'A atividade Google Meet {$a} exige uma nova autorização do Google Agenda.';
 $string['syncmanagedfailed'] = 'A atividade Google Meet {$a} recebeu uma falha na criação da conferência.';
+$string['syncmanagedguestlimitfailed'] = 'A atividade Google Meet {$a} excedeu o limite seguro de convidados.';
 $string['syncmanagedpending'] = 'A atividade Google Meet {$a} aguarda a criação da conferência pelo Google.';
 $string['syncmanagedready'] = 'A atividade Google Meet {$a} está sincronizada e pronta.';
 $string['syncmanagedresponsefailed'] = 'A atividade Google Meet {$a} recebeu uma resposta inválida do Google Agenda.';

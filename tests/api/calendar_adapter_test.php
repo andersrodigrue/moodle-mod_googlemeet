@@ -16,6 +16,8 @@
 
 namespace mod_googlemeet\api;
 
+use mod_googlemeet\local\calendar_guest_policy;
+use mod_googlemeet\local\calendar_guest_snapshot;
 use mod_googlemeet\local\integration_mode;
 use PHPUnit\Framework\Attributes\CoversClass;
 
@@ -144,7 +146,7 @@ final class calendar_adapter_test extends \advanced_testcase {
         $client = new calendar_adapter_test_client();
         $meeting = $this->meeting([
             'googleeventid' => 'event123',
-            'sendupdates' => 'externalOnly',
+            'guestcount' => 2,
         ]);
 
         (new calendar_adapter($client))->cancel($meeting);
@@ -153,7 +155,7 @@ final class calendar_adapter_test extends \advanced_testcase {
             'method' => 'delete',
             'calendarid' => 'primary',
             'eventid' => 'event123',
-            'parameters' => ['sendUpdates' => 'externalOnly'],
+            'parameters' => ['sendUpdates' => 'all'],
         ]], $client->calls);
     }
 
@@ -202,6 +204,41 @@ final class calendar_adapter_test extends \advanced_testcase {
             'EXDATE:20260815T130000Z',
         ], $call['event']['recurrence']);
         $this->assertSame(1, $call['parameters']['conferenceDataVersion']);
+        $this->assertSame('none', $call['parameters']['sendUpdates']);
+    }
+
+    /**
+     * Opted-in creation sends only the bounded managed attendee list.
+     */
+    public function test_new_meeting_inserts_explicit_course_guests(): void {
+        $identity = new calendar_identity('https://moodle.example.test');
+        $eventid = $identity->event_id(42);
+        $requestid = $identity->request_id(42, $eventid);
+        $client = new calendar_adapter_test_client();
+        $client->insertresponse = $this->response(
+            $eventid,
+            $requestid,
+            calendar_event_result::PENDING
+        );
+        $meeting = $this->meeting([
+            'guestpolicy' => calendar_guest_policy::COURSE,
+            'sendupdates' => 'all',
+        ]);
+        $guests = calendar_guest_snapshot::course([
+            (object) ['id' => 3, 'email' => 'StudentB@example.test'],
+            (object) ['id' => 2, 'email' => 'studenta@example.test'],
+        ]);
+
+        (new calendar_adapter($client, $identity))->synchronise($meeting, $guests);
+
+        $call = $client->calls[0];
+        $this->assertSame([
+            ['email' => 'studenta@example.test'],
+            ['email' => 'studentb@example.test'],
+        ], $call['event']['attendees']);
+        $this->assertFalse($call['event']['guestsCanInviteOthers']);
+        $this->assertFalse($call['event']['guestsCanModify']);
+        $this->assertFalse($call['event']['guestsCanSeeOtherGuests']);
         $this->assertSame('all', $call['parameters']['sendUpdates']);
     }
 
@@ -272,6 +309,119 @@ final class calendar_adapter_test extends \advanced_testcase {
         $this->assertSame(['patch'], array_column($client->calls, 'method'));
         $this->assertArrayNotHasKey('conferenceData', $client->calls[0]['event']);
         $this->assertSame(1, $client->calls[0]['parameters']['conferenceDataVersion']);
+    }
+
+    /**
+     * Ordinary edits do not email every unchanged managed attendee again.
+     */
+    public function test_unchanged_course_guests_use_no_email_update_policy(): void {
+        $requestid = str_repeat('e', 64);
+        $guests = calendar_guest_snapshot::course([
+            (object) ['id' => 7, 'email' => 'student@example.test'],
+        ]);
+        $client = new calendar_adapter_test_client();
+        $client->patchresponse = $this->success_response('persistedevent1', $requestid);
+        $meeting = $this->meeting([
+            'googleeventid' => 'persistedevent1',
+            'requestid' => $requestid,
+            'conferencestatus' => calendar_event_result::SUCCESS,
+            'meetinguri' => 'https://meet.google.com/abc-defg-hij',
+            'guestpolicy' => calendar_guest_policy::COURSE,
+            'guesthash' => $guests->hash(),
+            'guestcount' => 1,
+        ]);
+
+        (new calendar_adapter(
+            $client,
+            new calendar_identity('https://moodle.example.test')
+        ))->synchronise($meeting, $guests, [
+            calendar_guest_snapshot::email_hash('student@example.test') => true,
+        ]);
+
+        $this->assertSame(['patch'], array_column($client->calls, 'method'));
+        $this->assertArrayNotHasKey('attendees', $client->calls[0]['event']);
+        $this->assertSame('none', $client->calls[0]['parameters']['sendUpdates']);
+    }
+
+    /**
+     * Changed enrolments preserve manual guests and existing RSVP state.
+     */
+    public function test_guest_reconciliation_preserves_manual_attendees_and_rsvp(): void {
+        $requestid = str_repeat('c', 64);
+        $oldmanaged = calendar_guest_snapshot::email_hash('old@example.test');
+        $keptmanaged = calendar_guest_snapshot::email_hash('keep@example.test');
+        $client = new calendar_adapter_test_client();
+        $client->getresponse = [
+            'attendees' => [
+                ['email' => 'owner@example.test', 'organizer' => true, 'responseStatus' => 'accepted'],
+                ['email' => 'old@example.test', 'responseStatus' => 'accepted'],
+                ['email' => 'keep@example.test', 'responseStatus' => 'declined'],
+                ['email' => 'manual@example.test', 'responseStatus' => 'tentative', 'optional' => true],
+            ],
+        ];
+        $client->patchresponse = $this->success_response('persistedevent1', $requestid);
+        $meeting = $this->meeting([
+            'googleeventid' => 'persistedevent1',
+            'requestid' => $requestid,
+            'conferencestatus' => calendar_event_result::SUCCESS,
+            'meetinguri' => 'https://meet.google.com/abc-defg-hij',
+            'guestpolicy' => calendar_guest_policy::COURSE,
+            'guesthash' => str_repeat('1', 64),
+            'guestcount' => 2,
+        ]);
+        $desired = calendar_guest_snapshot::course([
+            (object) ['id' => 7, 'email' => 'keep@example.test'],
+            (object) ['id' => 8, 'email' => 'new@example.test'],
+        ]);
+
+        (new calendar_adapter(
+            $client,
+            new calendar_identity('https://moodle.example.test')
+        ))->synchronise($meeting, $desired, [
+            $oldmanaged => true,
+            $keptmanaged => true,
+        ]);
+
+        $this->assertSame(['get', 'patch'], array_column($client->calls, 'method'));
+        $this->assertSame([
+            ['email' => 'keep@example.test', 'responseStatus' => 'declined'],
+            ['email' => 'manual@example.test', 'responseStatus' => 'tentative', 'optional' => true],
+            ['email' => 'new@example.test'],
+        ], $client->calls[1]['event']['attendees']);
+        $this->assertSame('all', $client->calls[1]['parameters']['sendUpdates']);
+    }
+
+    /**
+     * Calendar omissions stop reconciliation before a destructive array patch.
+     */
+    public function test_guest_reconciliation_rejects_omitted_attendees(): void {
+        $requestid = str_repeat('d', 64);
+        $client = new calendar_adapter_test_client();
+        $client->getresponse = [
+            'attendeesOmitted' => true,
+            'attendees' => [],
+        ];
+        $meeting = $this->meeting([
+            'googleeventid' => 'persistedevent1',
+            'requestid' => $requestid,
+            'conferencestatus' => calendar_event_result::SUCCESS,
+            'meetinguri' => 'https://meet.google.com/abc-defg-hij',
+            'guestpolicy' => calendar_guest_policy::COURSE,
+            'guesthash' => str_repeat('2', 64),
+        ]);
+        $desired = calendar_guest_snapshot::course([
+            (object) ['id' => 7, 'email' => 'student@example.test'],
+        ]);
+
+        $this->expectException(calendar_response_exception::class);
+        try {
+            (new calendar_adapter(
+                $client,
+                new calendar_identity('https://moodle.example.test')
+            ))->synchronise($meeting, $desired);
+        } finally {
+            $this->assertSame(['get'], array_column($client->calls, 'method'));
+        }
     }
 
     /**
@@ -349,6 +499,9 @@ final class calendar_adapter_test extends \advanced_testcase {
             'timezone' => 'America/Sao_Paulo',
             'recurrence' => null,
             'sendupdates' => 'all',
+            'guestpolicy' => calendar_guest_policy::NONE,
+            'guesthash' => null,
+            'guestcount' => 0,
         ]);
     }
 

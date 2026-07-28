@@ -80,6 +80,8 @@ class mod_googlemeet_generator extends testing_module_generator {
             'timestart' => (int) $record['eventdate'],
             'timeend' => (int) $record['eventdate'] + HOURSECS,
             'sendupdates' => 'none',
+            'guestpolicy' => \mod_googlemeet\local\calendar_guest_policy::NONE,
+            'guestcount' => 0,
             'syncstatus' => \mod_googlemeet\local\sync_state::READY,
             'syncattempts' => 0,
             'timecreated' => $now,

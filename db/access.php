@@ -47,6 +47,15 @@ $capabilities = [
         ],
     ],
 
+    'mod/googlemeet:receivecalendarinvite' => [
+        'captype' => 'read',
+        'riskbitmask' => RISK_PERSONAL,
+        'contextlevel' => CONTEXT_MODULE,
+        'archetypes' => [
+            'student' => CAP_ALLOW,
+        ],
+    ],
+
     'mod/googlemeet:addinstance' => [
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,

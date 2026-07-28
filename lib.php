@@ -23,6 +23,7 @@
  */
 
 use mod_googlemeet\api\calendar_authorization_exception;
+use mod_googlemeet\local\calendar_guest_policy;
 use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\meeting_form_data;
 use mod_googlemeet\local\meeting_manager;
@@ -188,6 +189,12 @@ function googlemeet_prepare_integration(
         $googlemeet->requestid = null;
         $googlemeet->conferenceid = null;
         $googlemeet->meetingcode = null;
+        $googlemeet->guestpolicy = calendar_guest_policy::NONE;
+        $googlemeet->guesthash = null;
+        $googlemeet->guestcount = 0;
+        $googlemeet->guesttimelastsync = null;
+        $googlemeet->guesttimechecked = null;
+        $googlemeet->sendupdates = 'none';
         $googlemeet->syncstatus = sync_state::READY;
         $googlemeet->conferencestatus = null;
         $googlemeet->syncattempts = 0;
@@ -230,10 +237,24 @@ function googlemeet_prepare_integration(
     $googlemeet->oauthissuerid = $issuerid;
     $googlemeet->calendarid = 'primary';
     $googlemeet->creatoremail = null;
+    $guestpolicy = (string) (
+        $googlemeet->guestpolicy
+        ?? $existing?->guestpolicy
+        ?? calendar_guest_policy::NONE
+    );
+    if (!calendar_guest_policy::is_valid($guestpolicy)) {
+        throw new moodle_exception('invalidguestpolicy', 'mod_googlemeet');
+    }
+    $googlemeet->guestpolicy = $guestpolicy;
+    $googlemeet->sendupdates = calendar_guest_policy::send_updates($guestpolicy);
 
     if ($existing !== null && $existing->integrationmode === integration_mode::MANAGED) {
         $googlemeet->url = (string) $existing->url;
         $googlemeet->meetinguri = $existing->meetinguri;
+        $googlemeet->guesthash = $existing->guesthash ?? null;
+        $googlemeet->guestcount = (int) ($existing->guestcount ?? 0);
+        $googlemeet->guesttimelastsync = $existing->guesttimelastsync ?? null;
+        $googlemeet->guesttimechecked = $existing->guesttimechecked ?? null;
         return $googlemeet;
     }
 
@@ -246,6 +267,10 @@ function googlemeet_prepare_integration(
     $googlemeet->requestid = null;
     $googlemeet->conferenceid = null;
     $googlemeet->meetingcode = null;
+    $googlemeet->guesthash = null;
+    $googlemeet->guestcount = 0;
+    $googlemeet->guesttimelastsync = null;
+    $googlemeet->guesttimechecked = null;
     $googlemeet->conferencestatus = null;
     $googlemeet->syncattempts = 0;
     $googlemeet->lasterrorcode = null;
@@ -273,6 +298,7 @@ function googlemeet_delete_instance($id) {
 
     (new schedule_manager())->delete((int) $id);
 
+    $DB->delete_records('googlemeet_calendar_guests', ['googlemeetid' => $id]);
     $DB->delete_records('googlemeet_recordings', ['googlemeetid' => $id]);
 
     $DB->delete_records('googlemeet', array('id' => $id));

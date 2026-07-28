@@ -18,6 +18,7 @@ namespace mod_googlemeet;
 
 require_once(__DIR__ . '/../lib.php');
 
+use mod_googlemeet\local\calendar_guest_policy;
 use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\oauth_manager;
 use mod_googlemeet\local\sync_state;
@@ -82,6 +83,9 @@ final class integration_preparation_test extends \advanced_testcase {
             'oauthissuerid' => 888,
             'eventid' => 'legacy',
             'googleeventid' => 'remote',
+            'guestpolicy' => calendar_guest_policy::COURSE,
+            'guesthash' => str_repeat('a', 64),
+            'guestcount' => 99,
         ];
 
         $result = \googlemeet_prepare_integration($data);
@@ -93,6 +97,10 @@ final class integration_preparation_test extends \advanced_testcase {
         $this->assertNull($result->oauthissuerid);
         $this->assertNull($result->eventid);
         $this->assertNull($result->googleeventid);
+        $this->assertSame(calendar_guest_policy::NONE, $result->guestpolicy);
+        $this->assertNull($result->guesthash);
+        $this->assertSame(0, $result->guestcount);
+        $this->assertSame('none', $result->sendupdates);
     }
 
     /**
@@ -115,6 +123,9 @@ final class integration_preparation_test extends \advanced_testcase {
             'owneruserid' => 999,
             'oauthissuerid' => 888,
             'googleeventid' => 'attacker-controlled',
+            'guestpolicy' => calendar_guest_policy::COURSE,
+            'guesthash' => str_repeat('b', 64),
+            'guestcount' => 999,
             'url' => 'https://meet.google.com/abc-defg-hij',
         ];
 
@@ -127,6 +138,10 @@ final class integration_preparation_test extends \advanced_testcase {
         $this->assertSame('', $result->url);
         $this->assertNull($result->meetinguri);
         $this->assertNull($result->googleeventid);
+        $this->assertSame(calendar_guest_policy::COURSE, $result->guestpolicy);
+        $this->assertSame('all', $result->sendupdates);
+        $this->assertNull($result->guesthash);
+        $this->assertSame(0, $result->guestcount);
     }
 
     /**

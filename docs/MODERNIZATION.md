@@ -383,10 +383,47 @@ teacher workflow:
   defaults. Removing them requires a later deprecation window and a separate
   upgrade decision.
 
+## Explicit Calendar guest policy
+
+The twelfth structural slice makes Calendar invitations opt-in and bounded:
+
+- a managed activity defaults to `none`; the teacher must explicitly choose
+  whether Moodle manages active course participants as Google Calendar
+  attendees;
+- eligibility is controlled by
+  `mod/googlemeet:receivecalendarinvite`, assigned to the student archetype by
+  default, and evaluated in the activity context so local overrides apply;
+- the organizer, deleted or suspended accounts, invalid addresses and duplicate
+  normalized addresses are excluded;
+- resolution stops with a visible synchronization failure when more than 200
+  unique attendees would be managed. The plugin never sends a truncated guest
+  list;
+- new attendees receive a minimal payload and conservative permissions: they
+  cannot modify the event, invite others or see the complete guest list;
+- attendee-array updates first read the current Calendar event because Google
+  replaces the complete array. The plugin removes only addresses proven by the
+  preceding local receipt to be Moodle-managed, preserving manually added
+  Calendar guests and writable RSVP state;
+- `sendUpdates=all` is derived server-side only for initial invitations,
+  membership changes and cancellation. Schedule or title changes with the same
+  guest set use `sendUpdates=none`, preventing repeated mass email;
+- raw email addresses exist only inside the owner-scoped synchronization task.
+  Persistent receipts contain a Moodle user ID and a normalized SHA-256 email
+  hash used to distinguish managed and manual attendees;
+- an hourly scheduled task inspects at most 25 ready activities, and each
+  activity is checked no more than once every six hours. It queues an
+  owner-scoped ad hoc task only when the bounded participant hash changes; cron
+  itself never uses a teacher's OAuth token;
+- backup excludes guest receipts and restores the policy as disabled. Privacy
+  metadata, discovery, export and deletion cover the local receipts and Google
+  Calendar attendee processing without causing a remote mutation from a
+  privacy callback.
+
 ## Next structural slice
 
-The next slice should implement an explicit guest policy for Calendar-managed
-meetings. The teacher should be able to choose whether active course participants
-become Google Calendar attendees, with a bounded reconciliation strategy,
-appropriate `sendUpdates` behavior, privacy declarations and protection against
-accidentally emailing an entire course during ordinary edits.
+The next slice should add privacy-safe operational observability for the managed
+pipeline. Structured Moodle events and an administrator-facing diagnostic view
+should cover queueing, synchronization, cancellation, guest reconciliation and
+recording discovery without exposing OAuth tokens, raw attendee addresses or
+Google response bodies. Retention boundaries and automated tests should be part
+of that design before the alpha line is considered for wider testing.

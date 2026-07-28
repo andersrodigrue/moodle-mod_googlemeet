@@ -135,6 +135,12 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
         $data->recordinglasterrorcode = null;
         $data->recordinglasterrormessage = null;
         $data->recordingtimelastattempt = null;
+        $data->guestpolicy = \mod_googlemeet\local\calendar_guest_policy::NONE;
+        $data->guesthash = null;
+        $data->guestcount = 0;
+        $data->guesttimelastsync = null;
+        $data->guesttimechecked = null;
+        $data->sendupdates = 'none';
         $data->lastsync = null;
         $data->creatoremail = null;
 

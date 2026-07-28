@@ -486,5 +486,103 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
         upgrade_mod_savepoint(true, 2026072610, 'googlemeet');
     }
 
+    if ($oldversion < 2026072612) {
+        $table = new xmldb_table('googlemeet');
+        $fields = [
+            new xmldb_field(
+                'guestpolicy',
+                XMLDB_TYPE_CHAR,
+                '16',
+                null,
+                XMLDB_NOTNULL,
+                null,
+                'none',
+                'sendupdates'
+            ),
+            new xmldb_field('guesthash', XMLDB_TYPE_CHAR, '64', null, null, null, null, 'guestpolicy'),
+            new xmldb_field(
+                'guestcount',
+                XMLDB_TYPE_INTEGER,
+                '10',
+                null,
+                XMLDB_NOTNULL,
+                null,
+                '0',
+                'guesthash'
+            ),
+            new xmldb_field(
+                'guesttimelastsync',
+                XMLDB_TYPE_INTEGER,
+                '10',
+                null,
+                null,
+                null,
+                null,
+                'guestcount'
+            ),
+            new xmldb_field(
+                'guesttimechecked',
+                XMLDB_TYPE_INTEGER,
+                '10',
+                null,
+                null,
+                null,
+                null,
+                'guesttimelastsync'
+            ),
+        ];
+        foreach ($fields as $field) {
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+
+        // Existing activities never managed attendees, regardless of a historic
+        // sendUpdates value stored by pre-release builds.
+        $DB->set_field('googlemeet', 'guestpolicy', 'none');
+        $DB->set_field('googlemeet', 'sendupdates', 'none');
+
+        $guestreconcileindex = new xmldb_index(
+            'guestreconcile',
+            XMLDB_INDEX_NOTUNIQUE,
+            ['guestpolicy', 'syncstatus', 'guesttimechecked']
+        );
+        if (!$dbman->index_exists($table, $guestreconcileindex)) {
+            $dbman->add_index($table, $guestreconcileindex);
+        }
+
+        $guesttable = new xmldb_table('googlemeet_calendar_guests');
+        $guesttable->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $guesttable->add_field('googlemeetid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $guesttable->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $guesttable->add_field('emailhash', XMLDB_TYPE_CHAR, '64', null, XMLDB_NOTNULL);
+        $guesttable->add_field(
+            'timemodified',
+            XMLDB_TYPE_INTEGER,
+            '10',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            '0'
+        );
+        $guesttable->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $guesttable->add_key(
+            'googlemeetidfk',
+            XMLDB_KEY_FOREIGN,
+            ['googlemeetid'],
+            'googlemeet',
+            ['id']
+        );
+        $guesttable->add_key('useridfk', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
+        $guesttable->add_index('activityuser', XMLDB_INDEX_UNIQUE, ['googlemeetid', 'userid']);
+        $guesttable->add_index('activityemail', XMLDB_INDEX_UNIQUE, ['googlemeetid', 'emailhash']);
+        $guesttable->add_index('userid', XMLDB_INDEX_NOTUNIQUE, ['userid']);
+        if (!$dbman->table_exists($guesttable)) {
+            $dbman->create_table($guesttable);
+        }
+
+        upgrade_mod_savepoint(true, 2026072612, 'googlemeet');
+    }
+
     return true;
 }

@@ -90,6 +90,12 @@ final class privacy_lifecycle_test extends \advanced_testcase {
             'recordingsyncstatus' => recording_sync_state::READY,
         ]);
         $recordingid = $this->insert_recording($meeting->id);
+        $DB->insert_record('googlemeet_calendar_guests', (object) [
+            'googlemeetid' => $meeting->id,
+            'userid' => $owner->id,
+            'emailhash' => hash('sha256', strtolower($owner->email)),
+            'timemodified' => time(),
+        ]);
 
         $updated = (new privacy_lifecycle())->disconnect_calendar($meeting->id, $owner->id);
 
@@ -103,6 +109,9 @@ final class privacy_lifecycle_test extends \advanced_testcase {
         $this->assertSame((int) $recordingowner->id, (int) $updated->recordingowneruserid);
         $this->assertSame(recording_sync_state::READY, $updated->recordingsyncstatus);
         $this->assertTrue($DB->record_exists('googlemeet_recordings', ['id' => $recordingid]));
+        $this->assertFalse($DB->record_exists('googlemeet_calendar_guests', [
+            'googlemeetid' => $meeting->id,
+        ]));
     }
 
     /**

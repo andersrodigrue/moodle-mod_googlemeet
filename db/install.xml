@@ -43,7 +43,12 @@
         <FIELD NAME="timeend" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Absolute meeting end timestamp."/>
         <FIELD NAME="timezone" TYPE="char" LENGTH="64" NOTNULL="false" SEQUENCE="false" COMMENT="IANA timezone used for the meeting."/>
         <FIELD NAME="recurrence" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Normalized recurrence rule."/>
-        <FIELD NAME="sendupdates" TYPE="char" LENGTH="16" NOTNULL="true" DEFAULT="none" SEQUENCE="false" COMMENT="Google Calendar guest notification policy."/>
+        <FIELD NAME="sendupdates" TYPE="char" LENGTH="16" NOTNULL="true" DEFAULT="none" SEQUENCE="false" COMMENT="Derived Google Calendar guest notification policy."/>
+        <FIELD NAME="guestpolicy" TYPE="char" LENGTH="16" NOTNULL="true" DEFAULT="none" SEQUENCE="false" COMMENT="Whether Moodle manages active course participants as Calendar attendees."/>
+        <FIELD NAME="guesthash" TYPE="char" LENGTH="64" NOTNULL="false" SEQUENCE="false" COMMENT="Stable hash of the last managed Calendar attendee set."/>
+        <FIELD NAME="guestcount" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Number of attendees managed during the last Calendar mutation."/>
+        <FIELD NAME="guesttimelastsync" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Timestamp of the last successful attendee mutation."/>
+        <FIELD NAME="guesttimechecked" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Timestamp of the last bounded membership check."/>
         <FIELD NAME="syncstatus" TYPE="char" LENGTH="32" NOTNULL="true" DEFAULT="draft" SEQUENCE="false" COMMENT="Current synchronization state."/>
         <FIELD NAME="conferencestatus" TYPE="char" LENGTH="32" NOTNULL="false" SEQUENCE="false" COMMENT="Conference creation state returned by Google."/>
         <FIELD NAME="syncattempts" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Number of synchronization attempts."/>
@@ -66,6 +71,7 @@
         <INDEX NAME="course" UNIQUE="false" FIELDS="course"/>
         <INDEX NAME="owneruserid" UNIQUE="false" FIELDS="owneruserid"/>
         <INDEX NAME="syncstatus" UNIQUE="false" FIELDS="syncstatus"/>
+        <INDEX NAME="guestreconcile" UNIQUE="false" FIELDS="guestpolicy, syncstatus, guesttimechecked"/>
         <INDEX NAME="recordingowneruserid" UNIQUE="false" FIELDS="recordingowneruserid"/>
         <INDEX NAME="recordingsyncstatus" UNIQUE="false" FIELDS="recordingsyncstatus"/>
       </INDEXES>
@@ -88,6 +94,25 @@
         <INDEX NAME="activityoccurrence" UNIQUE="true" FIELDS="googlemeetid, occurrencekey"/>
         <INDEX NAME="calendareventid" UNIQUE="false" FIELDS="calendareventid"/>
         <INDEX NAME="eventdate" UNIQUE="false" FIELDS="eventdate"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="googlemeet_calendar_guests" COMMENT="Tracks Calendar attendees managed from active Moodle enrolments.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="googlemeetid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Moodle user represented by the managed attendee."/>
+        <FIELD NAME="emailhash" TYPE="char" LENGTH="64" NOTNULL="true" SEQUENCE="false" COMMENT="One-way normalized email hash used to preserve manual Calendar guests."/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of the last snapshot mutation."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="googlemeetidfk" TYPE="foreign" FIELDS="googlemeetid" REFTABLE="googlemeet" REFFIELDS="id"/>
+        <KEY NAME="useridfk" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="activityuser" UNIQUE="true" FIELDS="googlemeetid, userid"/>
+        <INDEX NAME="activityemail" UNIQUE="true" FIELDS="googlemeetid, emailhash"/>
+        <INDEX NAME="userid" UNIQUE="false" FIELDS="userid"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="googlemeet_recordings" COMMENT="Stores references from Google Meet recordings.">

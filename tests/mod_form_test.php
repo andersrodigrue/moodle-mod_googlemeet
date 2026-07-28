@@ -102,6 +102,8 @@ final class mod_form_test extends \advanced_testcase {
             'recurrenceweekdays',
             'recurrenceinterval',
             'recurrenceuntil',
+            'guestpolicy',
+            'guestpolicywarning',
         ] as $field) {
             $this->assertTrue($mform->elementExists($field), $field);
         }

@@ -77,6 +77,7 @@ final class privacy_lifecycle {
             }
 
             $this->update_meeting($meeting, $this->calendar_fields(true));
+            (new calendar_guest_repository())->delete_activity_data($googlemeetid);
 
             return $DB->get_record('googlemeet', ['id' => $googlemeetid], '*', MUST_EXIST);
         });
@@ -141,10 +142,12 @@ final class privacy_lifecycle {
             }
 
             $changes = [];
+            $clearallguests = false;
             if (in_array((int) ($meeting->owneruserid ?? 0), $userids, true)) {
                 $changes += $this->calendar_fields(
                     $meeting->integrationmode === integration_mode::MANAGED
                 );
+                $clearallguests = true;
             }
             if (in_array((int) ($meeting->recordingowneruserid ?? 0), $userids, true)) {
                 $changes += $this->recording_fields();
@@ -163,6 +166,12 @@ final class privacy_lifecycle {
                 $this->update_meeting($meeting, $changes);
             }
             $this->delete_notification_receipts($googlemeetid, $userids);
+            $guestrepository = new calendar_guest_repository();
+            if ($clearallguests) {
+                $guestrepository->delete_activity_data($googlemeetid);
+            } else {
+                $guestrepository->delete_users_data($googlemeetid, $userids);
+            }
         });
     }
 
@@ -198,6 +207,7 @@ final class privacy_lifecycle {
                 $changes += $this->recording_fields();
             }
             $this->update_meeting($meeting, $changes);
+            (new calendar_guest_repository())->delete_activity_data($googlemeetid);
             $DB->delete_records_select(
                 'googlemeet_notify_done',
                 'eventid IN (SELECT id FROM {googlemeet_events} WHERE googlemeetid = :googlemeetid)',
@@ -229,6 +239,12 @@ final class privacy_lifecycle {
             'lasterrorcode' => null,
             'lasterrormessage' => null,
             'timelastattempt' => null,
+            'guestpolicy' => calendar_guest_policy::NONE,
+            'guesthash' => null,
+            'guestcount' => 0,
+            'guesttimelastsync' => null,
+            'guesttimechecked' => null,
+            'sendupdates' => 'none',
         ];
         if ($clearjoinlink) {
             $fields['meetinguri'] = null;

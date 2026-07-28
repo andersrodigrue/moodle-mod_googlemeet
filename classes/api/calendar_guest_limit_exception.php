@@ -14,19 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace mod_googlemeet\api;
+
 /**
- * Plugin version and other meta-data are defined here.
+ * Calendar guest reconciliation exceeded the plugin's safety boundary.
  *
  * @package     mod_googlemeet
- * @copyright   2020 Rone Santos <ronefel@hotmail.com>
+ * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-$plugin->component = 'mod_googlemeet';
-$plugin->release = '3.0.0-dev';
-$plugin->version = 2026072612;
-$plugin->requires = 2026042000; // Moodle 5.2.
-$plugin->supported = [502, 502];
-$plugin->maturity = MATURITY_ALPHA;
+final class calendar_guest_limit_exception extends \RuntimeException {
+}

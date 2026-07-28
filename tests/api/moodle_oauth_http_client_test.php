@@ -57,6 +57,29 @@ final class moodle_oauth_http_client_test extends \advanced_testcase {
     }
 
     /**
+     * Calendar cancellation uses Moodle's authenticated DELETE transport.
+     */
+    public function test_delete_uses_authenticated_moodle_client(): void {
+        $client = $this->createMock(\core\oauth2\client::class);
+        $client->expects($this->once())->method('is_logged_in')->willReturn(true);
+        $client->expects($this->exactly(2))->method('setHeader');
+        $client->expects($this->once())
+            ->method('delete')
+            ->with('https://www.googleapis.com/calendar/v3/calendars/primary/events/event1')
+            ->willReturn('');
+        $client->method('get_errno')->willReturn(0);
+        $client->method('get_info')->willReturn(['http_code' => 204]);
+
+        $response = (new moodle_oauth_http_client($client))->request(
+            'DELETE',
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events/event1'
+        );
+
+        $this->assertSame(204, $response['status']);
+        $this->assertSame('', $response['body']);
+    }
+
+    /**
      * Moodle returning false after refresh invalidation requires reconnection.
      */
     public function test_rejects_missing_authorization(): void {

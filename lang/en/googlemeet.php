@@ -58,6 +58,7 @@ $string['from'] = 'from';
 $string['googlemeet:addinstance'] = 'Add a new Google Meet™ for Moodle';
 $string['googlemeet:editrecording'] = 'Edit recordings';
 $string['googlemeet:managemeeting'] = 'Manage the Google Calendar meeting';
+$string['googlemeet:receivecalendarinvite'] = 'Receive Google Calendar meeting invitations';
 $string['googlemeet:receivenotification'] = 'Receive meeting reminders';
 $string['googlemeet:removerecording'] = 'Remove recordings';
 $string['googlemeet:syncgoogledrive'] = 'Discover Google Meet recordings';
@@ -68,6 +69,7 @@ $string['invalideventenddate'] = 'The recurrence end cannot be earlier than the 
 $string['invalideventendtime'] = 'The end time must be greater than start time';
 $string['invalidissuerid'] = 'The OAuth service selected in the "Google Meet™ for Moodle" settings is not supported by Google';
 $string['invalidintegrationmode'] = 'Select a supported meeting integration mode.';
+$string['invalidguestpolicy'] = 'Select a supported Google Calendar invitation policy.';
 $string['invalidmeetingtimezone'] = 'Select a valid IANA timezone.';
 $string['invalidrecurrenceinterval'] = 'The recurrence interval must be between 1 and 36 weeks.';
 $string['invalidschedule'] = 'The meeting schedule is invalid. Review its dates, timezone and recurrence.';
@@ -81,6 +83,16 @@ $string['integrationmode_help'] = 'Managed mode creates and reconciles the Googl
     . 'your own authorization. Manual mode stores an existing Google Meet link without managing a Calendar event.';
 $string['integrationmodemanaged'] = 'Create and manage with Google Calendar';
 $string['integrationmodemanual'] = 'Use an existing Google Meet link';
+$string['guestlimitexceeded'] = 'This activity can invite at most {$a} active participants. Reduce the eligible '
+    . 'enrolments or keep Calendar invitations disabled.';
+$string['guestpolicy'] = 'Google Calendar invitations';
+$string['guestpolicy_help'] = 'Choose explicitly whether active enrolled users with the Calendar invitation '
+    . 'capability become attendees of the Google Calendar event. Invitations, updates and removals can send email.';
+$string['guestpolicycourse'] = 'Invite active course participants';
+$string['guestpolicynone'] = 'Do not add course participants to Google Calendar';
+$string['guestpolicywarning'] = 'Saving this option can send Google Calendar email to as many as {$a} active '
+    . 'participants. Moodle reconciles only users with the dedicated invitation capability and never sends a '
+    . 'partial list above this limit.';
 $string['jstableinfo'] = 'Showing {start} to {end} of {rows} recordings';
 $string['jstableinfofiltered'] = 'Showing {start} to {end} of {rows} recordings (filtered from {rowsTotal} recordings)';
 $string['jstableloading'] = 'Loading...';
@@ -147,6 +159,8 @@ $string['privacy:metadata:core_oauth2'] = 'Moodle core stores the per-user OAuth
 $string['privacy:metadata:google_calendar'] = 'A connected teacher account sends event and conference data to Google Calendar.';
 $string['privacy:metadata:google_calendar:authorizedaccount'] = 'The Google account authorized by the teacher.';
 $string['privacy:metadata:google_calendar:conference'] = 'The request to create a Google Meet conference.';
+$string['privacy:metadata:google_calendar:attendees'] = 'Email addresses of active course participants explicitly '
+    . 'selected as Calendar attendees.';
 $string['privacy:metadata:google_calendar:recurrence'] = 'The event recurrence rule.';
 $string['privacy:metadata:google_calendar:schedule'] = 'The event start and end.';
 $string['privacy:metadata:google_calendar:summary'] = 'The Moodle activity name used as the event summary.';
@@ -182,6 +196,15 @@ $string['privacy:metadata:googlemeet:requestid'] = 'The idempotency identifier u
 $string['privacy:metadata:googlemeet:syncattempts'] = 'The number of Calendar synchronization attempts.';
 $string['privacy:metadata:googlemeet:syncstatus'] = 'The Calendar synchronization state.';
 $string['privacy:metadata:googlemeet:timelastattempt'] = 'The time of the last Calendar synchronization attempt.';
+$string['privacy:metadata:googlemeet:guestcount'] = 'The number of attendees managed during the last Calendar update.';
+$string['privacy:metadata:googlemeet:guesthash'] = 'A stable hash of the last managed Calendar attendee set.';
+$string['privacy:metadata:googlemeet:guesttimechecked'] = 'The time Moodle last checked eligible course participants.';
+$string['privacy:metadata:googlemeet:guesttimelastsync'] = 'The time Moodle last changed managed Calendar attendees.';
+$string['privacy:metadata:googlemeet_calendar_guests'] = 'Stores the bounded local receipt of attendees managed from '
+    . 'active Moodle enrolments.';
+$string['privacy:metadata:googlemeet_calendar_guests:emailhash'] = 'A one-way normalized hash of the attendee email.';
+$string['privacy:metadata:googlemeet_calendar_guests:timemodified'] = 'The time the managed attendee receipt changed.';
+$string['privacy:metadata:googlemeet_calendar_guests:userid'] = 'The Moodle user represented by the managed attendee.';
 $string['privacy:metadata:googlemeet_notify_done'] = 'Stores receipts for meeting reminders sent to users.';
 $string['privacy:metadata:googlemeet_notify_done:eventid'] = 'The local event associated with the reminder.';
 $string['privacy:metadata:googlemeet_notify_done:timesent'] = 'The time when the reminder was sent.';
@@ -194,6 +217,7 @@ $string['privacy:metadata:googlemeet_recordings:recordingid'] = 'The Google Driv
 $string['privacy:metadata:googlemeet_recordings:visible'] = 'Whether the recording is visible to course participants.';
 $string['privacy:metadata:googlemeet_recordings:webviewlink'] = 'The Google Drive playback link returned by Google Meet.';
 $string['privacy:path:calendar'] = 'Google Calendar authorization and synchronization';
+$string['privacy:path:calendarattendee'] = 'Managed Google Calendar invitation';
 $string['privacy:path:notifications'] = 'Meeting reminder receipts';
 $string['privacy:path:recordingauthorization'] = 'Google Meet recording authorization';
 $string['privacy:path:recordings'] = 'Shared recording references discovered with your authorization';
@@ -202,6 +226,9 @@ $string['recordings'] = 'Recordings';
 $string['recordingswiththename'] = 'Recordings with the name:';
 $string['reconcilependingresult'] = 'Calendar reconciliation found {$a->found} meeting(s) and queued {$a->queued}.';
 $string['reconcilependingtask'] = 'Reconcile pending Google Meet conferences';
+$string['reconcileguestsresult'] = 'Calendar guest check inspected {$a->found} meeting(s), queued {$a->queued} and '
+    . 'found {$a->unchanged} unchanged.';
+$string['reconcilegueststask'] = 'Reconcile Google Calendar guests';
 $string['recurrenceeventdate'] = 'Meeting recurrence';
 $string['recurrenceeventdate_help'] = 'Enable weekly recurrence, select one or more weekdays, choose an interval from '
     . '1 to 36 weeks, and set the inclusive recurrence boundary. A series can span at most one year.';
@@ -233,6 +260,8 @@ $string['synccalendarcancelapifailed'] = 'Google Calendar permanently rejected t
 $string['synccalendarapifailed'] = 'Google Calendar permanently rejected the synchronization request.';
 $string['synccalendarconfigurationinvalid'] = 'The managed Google Calendar configuration is invalid.';
 $string['synccalendarresponseinvalid'] = 'Google Calendar returned an incomplete or inconsistent event.';
+$string['syncguestlimitexceeded'] = 'Google Calendar invitations are limited to {$a} attendees so Moodle never sends '
+    . 'a partial or unexpectedly large invitation list.';
 $string['syncconferencecreationfailed'] = 'Google Calendar could not create the Google Meet conference.';
 $string['synccancel'] = 'Cancel meeting';
 $string['synccancelqueued'] = 'The meeting cancellation was queued.';
@@ -248,6 +277,7 @@ $string['syncmanagedconfigurationfailed'] = 'Google Meet activity {$a} has inval
 $string['syncmanageddeferred'] = 'Google Meet activity {$a} is waiting for the managed Google Calendar adapter.';
 $string['syncmanageddisconnected'] = 'Google Meet activity {$a} requires fresh Google Calendar authorization.';
 $string['syncmanagedfailed'] = 'Google Meet activity {$a} received a failed conference creation result.';
+$string['syncmanagedguestlimitfailed'] = 'Google Meet activity {$a} exceeded the Calendar guest safety limit.';
 $string['syncmanagedpending'] = 'Google Meet activity {$a} is waiting for Google to create the conference.';
 $string['syncmanagedready'] = 'Google Meet activity {$a} is synchronized and ready.';
 $string['syncmanagedresponsefailed'] = 'Google Meet activity {$a} received an invalid Calendar response.';

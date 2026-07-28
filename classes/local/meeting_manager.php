@@ -21,6 +21,7 @@ use mod_googlemeet\api\calendar_api_exception;
 use mod_googlemeet\api\calendar_authorization_exception;
 use mod_googlemeet\api\calendar_configuration_exception;
 use mod_googlemeet\api\calendar_event_result;
+use mod_googlemeet\api\calendar_guest_limit_exception;
 use mod_googlemeet\api\calendar_response_exception;
 use mod_googlemeet\task\synchronise_meeting;
 
@@ -55,6 +56,9 @@ final class meeting_manager {
     /** Stable error code for authorization requiring user action. */
     private const ERROR_AUTHORIZATION_REQUIRED = 'authorization_required';
 
+    /** Stable error code for the hard Calendar guest safety boundary. */
+    private const ERROR_GUEST_LIMIT = 'calendar_guest_limit_exceeded';
+
     /** @var sync_repository Synchronization repository. */
     private sync_repository $repository;
 
@@ -67,22 +71,34 @@ final class meeting_manager {
     /** @var calendar_adapter_provider|null Production adapter provider. */
     private ?calendar_adapter_provider $calendaradapterprovider;
 
+    /** @var calendar_guest_resolver Course participant resolver. */
+    private calendar_guest_resolver $guestresolver;
+
+    /** @var calendar_guest_repository Managed guest snapshot repository. */
+    private calendar_guest_repository $guestrepository;
+
     /**
      * @param sync_repository|null $repository Synchronization repository.
      * @param meeting_lock|null $lock Per-activity lock coordinator.
      * @param calendar_adapter|null $calendaradapter Managed Calendar adapter.
      * @param calendar_adapter_provider|null $calendaradapterprovider Production adapter provider.
+     * @param calendar_guest_resolver|null $guestresolver Course participant resolver.
+     * @param calendar_guest_repository|null $guestrepository Managed guest snapshot repository.
      */
     public function __construct(
         ?sync_repository $repository = null,
         ?meeting_lock $lock = null,
         ?calendar_adapter $calendaradapter = null,
-        ?calendar_adapter_provider $calendaradapterprovider = null
+        ?calendar_adapter_provider $calendaradapterprovider = null,
+        ?calendar_guest_resolver $guestresolver = null,
+        ?calendar_guest_repository $guestrepository = null
     ) {
         $this->repository = $repository ?? new sync_repository();
         $this->lock = $lock ?? new meeting_lock();
         $this->calendaradapter = $calendaradapter;
         $this->calendaradapterprovider = $calendaradapterprovider;
+        $this->guestresolver = $guestresolver ?? new calendar_guest_resolver();
+        $this->guestrepository = $guestrepository ?? new calendar_guest_repository();
     }
 
     /**
@@ -293,6 +309,8 @@ final class meeting_manager {
      * @param \stdClass $meeting Activity record in the syncing state.
      */
     private function process_managed(\stdClass $meeting): void {
+        global $DB;
+
         if ($this->calendaradapter === null && $this->calendaradapterprovider === null) {
             $this->repository->mark_failed(
                 (int) $meeting->id,
@@ -303,10 +321,14 @@ final class meeting_manager {
             return;
         }
 
+        $calendarismutated = empty($meeting->googleeventid)
+            || ($meeting->conferencestatus ?? null) !== calendar_event_result::PENDING;
         try {
+            $guests = $this->guestresolver->resolve($meeting);
+            $previousguesthashes = $this->guestrepository->previous_hashes((int) $meeting->id);
             $adapter = $this->calendaradapter
                 ?? $this->calendaradapterprovider->create($meeting);
-            $result = $adapter->synchronise($meeting);
+            $result = $adapter->synchronise($meeting, $guests, $previousguesthashes);
         } catch (calendar_authorization_exception $e) {
             $this->repository->mark_disconnected(
                 (int) $meeting->id,
@@ -322,6 +344,14 @@ final class meeting_manager {
                 get_string('synccalendarapifailed', 'mod_googlemeet')
             );
             mtrace(get_string('syncmanagedapifailed', 'mod_googlemeet', $meeting->id));
+            return;
+        } catch (calendar_guest_limit_exception $e) {
+            $this->repository->mark_failed(
+                (int) $meeting->id,
+                self::ERROR_GUEST_LIMIT,
+                get_string('syncguestlimitexceeded', 'mod_googlemeet', calendar_guest_resolver::MAX_ATTENDEES)
+            );
+            mtrace(get_string('syncmanagedguestlimitfailed', 'mod_googlemeet', $meeting->id));
             return;
         } catch (calendar_configuration_exception $e) {
             $this->repository->mark_failed(
@@ -341,7 +371,12 @@ final class meeting_manager {
             return;
         }
 
+        $transaction = $DB->start_delegated_transaction();
         $this->repository->apply_calendar_result((int) $meeting->id, $result);
+        if ($calendarismutated) {
+            $this->guestrepository->record_synchronised((int) $meeting->id, $guests);
+        }
+        $transaction->allow_commit();
         $messagekey = match ($result->status()) {
             calendar_event_result::PENDING => 'syncmanagedpending',
             calendar_event_result::SUCCESS => 'syncmanagedready',

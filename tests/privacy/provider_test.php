@@ -55,6 +55,9 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     /** @var \stdClass Reminder recipient. */
     private \stdClass $recipient;
 
+    /** @var \stdClass Managed Calendar attendee. */
+    private \stdClass $attendee;
+
     /** @var int Local event ID. */
     private int $eventid;
 
@@ -72,6 +75,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->recordingowner = $generator->create_user();
         $this->legacycreator = $generator->create_user();
         $this->recipient = $generator->create_user();
+        $this->attendee = $generator->create_user();
 
         $this->meeting = $generator->get_plugin_generator('mod_googlemeet')->create_instance([
             'course' => $course->id,
@@ -94,6 +98,11 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             'lasterrorcode' => 'safe_error',
             'lasterrormessage' => 'Safe diagnostic',
             'timelastattempt' => time() - HOURSECS,
+            'guestpolicy' => \mod_googlemeet\local\calendar_guest_policy::COURSE,
+            'guesthash' => str_repeat('a', 64),
+            'guestcount' => 1,
+            'guesttimelastsync' => time() - HOURSECS,
+            'guesttimechecked' => time() - HOURSECS,
             'recordingowneruserid' => $this->recordingowner->id,
             'recordingoauthissuerid' => 12,
             'recordingsyncstatus' => recording_sync_state::READY,
@@ -115,6 +124,12 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             'userid' => $this->recipient->id,
             'timesent' => time(),
         ]);
+        $DB->insert_record('googlemeet_calendar_guests', (object) [
+            'googlemeetid' => $this->meeting->id,
+            'userid' => $this->attendee->id,
+            'emailhash' => hash('sha256', strtolower($this->attendee->email)),
+            'timemodified' => time(),
+        ]);
         $DB->insert_record('googlemeet_recordings', (object) [
             'googlemeetid' => $this->meeting->id,
             'recordingid' => 'DriveFile_123',
@@ -134,8 +149,9 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $items = provider::get_metadata(new collection('mod_googlemeet'))->get_collection();
         $names = array_map(static fn($item): string => $item->get_name(), $items);
 
-        $this->assertCount(8, $names);
+        $this->assertCount(9, $names);
         $this->assertContains('googlemeet', $names);
+        $this->assertContains('googlemeet_calendar_guests', $names);
         $this->assertContains('googlemeet_recordings', $names);
         $this->assertContains('googlemeet_notify_done', $names);
         $this->assertContains('google_calendar', $names);
@@ -154,6 +170,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             $this->recordingowner,
             $this->legacycreator,
             $this->recipient,
+            $this->attendee,
         ] as $user) {
             $contextlist = provider::get_contexts_for_userid((int) $user->id);
             $this->assertCount(1, $contextlist);
@@ -178,6 +195,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             (int) $this->recordingowner->id,
             (int) $this->legacycreator->id,
             (int) $this->recipient->id,
+            (int) $this->attendee->id,
         ];
         sort($expected);
         $this->assertSame($expected, $userids);
@@ -191,7 +209,12 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
      * Each relationship produces an export under the activity context.
      */
     public function test_export_user_data_for_owners_and_recipient(): void {
-        foreach ([$this->calendarowner, $this->recordingowner, $this->recipient] as $user) {
+        foreach ([
+            $this->calendarowner,
+            $this->recordingowner,
+            $this->recipient,
+            $this->attendee,
+        ] as $user) {
             writer::reset();
             $this->export_context_data_for_user((int) $user->id, $this->context, 'mod_googlemeet');
             $this->assertTrue(writer::with_context($this->context)->has_any_data());
@@ -263,6 +286,28 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
+     * Managed attendee deletion removes only the approved local receipt.
+     */
+    public function test_delete_data_for_calendar_attendee_is_scoped(): void {
+        global $DB;
+
+        $contextlist = new approved_contextlist(
+            $this->attendee,
+            'mod_googlemeet',
+            [$this->context->id]
+        );
+        provider::delete_data_for_user($contextlist);
+
+        $this->assertFalse($DB->record_exists('googlemeet_calendar_guests', [
+            'googlemeetid' => $this->meeting->id,
+            'userid' => $this->attendee->id,
+        ]));
+        $meeting = $DB->get_record('googlemeet', ['id' => $this->meeting->id], '*', MUST_EXIST);
+        $this->assertSame((int) $this->calendarowner->id, (int) $meeting->owneruserid);
+        $this->assertNull($meeting->guesthash);
+    }
+
+    /**
      * Batch deletion removes approved users and leaves other relationships.
      */
     public function test_delete_data_for_users_is_bounded_to_approved_ids(): void {
@@ -301,6 +346,9 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assertSame('', $meeting->url);
         $this->assertFalse($DB->record_exists('googlemeet_notify_done', [
             'eventid' => $this->eventid,
+        ]));
+        $this->assertFalse($DB->record_exists('googlemeet_calendar_guests', [
+            'googlemeetid' => $this->meeting->id,
         ]));
         $this->assertTrue($DB->record_exists('googlemeet_recordings', [
             'googlemeetid' => $this->meeting->id,

@@ -16,6 +16,7 @@
 
 namespace mod_googlemeet;
 
+use mod_googlemeet\local\calendar_guest_policy;
 use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\recording_sync_state;
 use mod_googlemeet\local\sync_state;
@@ -112,6 +113,11 @@ final class backup_restore_test extends restore_date_testcase {
             'timezone' => 'America/Sao_Paulo',
             'recurrence' => 'RRULE:FREQ=WEEKLY;BYDAY=MO',
             'sendupdates' => 'all',
+            'guestpolicy' => calendar_guest_policy::COURSE,
+            'guesthash' => str_repeat('a', 64),
+            'guestcount' => 1,
+            'guesttimelastsync' => $start - HOURSECS,
+            'guesttimechecked' => $start - HOURSECS,
             'syncstatus' => sync_state::READY,
             'conferencestatus' => 'success',
             'syncattempts' => 3,
@@ -126,6 +132,13 @@ final class backup_restore_test extends restore_date_testcase {
             'recordinglasterrormessage' => 'Old recording error',
             'recordingtimelastattempt' => $start - HOURSECS,
             'lastsync' => $start,
+        ]);
+        $guest = $this->getDataGenerator()->create_user();
+        $DB->insert_record('googlemeet_calendar_guests', (object) [
+            'googlemeetid' => $source->id,
+            'userid' => $guest->id,
+            'emailhash' => hash('sha256', strtolower($guest->email)),
+            'timemodified' => $start,
         ]);
         $DB->insert_record('googlemeet_recordings', (object) [
             'googlemeetid' => $source->id,
@@ -152,7 +165,12 @@ final class backup_restore_test extends restore_date_testcase {
         $this->assertSame('primary', $restored->calendarid);
         $this->assertSame('America/Sao_Paulo', $restored->timezone);
         $this->assertSame('RRULE:FREQ=WEEKLY;BYDAY=MO', $restored->recurrence);
-        $this->assertSame('all', $restored->sendupdates);
+        $this->assertSame(calendar_guest_policy::NONE, $restored->guestpolicy);
+        $this->assertSame('none', $restored->sendupdates);
+        $this->assertNull($restored->guesthash);
+        $this->assertSame(0, (int) $restored->guestcount);
+        $this->assertNull($restored->guesttimelastsync);
+        $this->assertNull($restored->guesttimechecked);
         $this->assertSame(HOURSECS, (int) $restored->timeend - (int) $restored->timestart);
 
         $this->assertNull($restored->owneruserid);
@@ -180,6 +198,9 @@ final class backup_restore_test extends restore_date_testcase {
         $this->assertNull($restored->recordingtimelastattempt);
         $this->assertNull($restored->lastsync);
         $this->assertSame(0, $DB->count_records('googlemeet_recordings', [
+            'googlemeetid' => $restored->id,
+        ]));
+        $this->assertSame(0, $DB->count_records('googlemeet_calendar_guests', [
             'googlemeetid' => $restored->id,
         ]));
     }

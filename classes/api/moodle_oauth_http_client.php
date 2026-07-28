@@ -51,7 +51,7 @@ final class moodle_oauth_http_client implements calendar_http_client {
      */
     public function request(string $method, string $url, ?array $body = null): array {
         $method = strtoupper($method);
-        if (!in_array($method, ['GET', 'POST', 'PATCH'], true)) {
+        if (!in_array($method, ['DELETE', 'GET', 'POST', 'PATCH'], true)) {
             throw new \coding_exception('Unsupported Google Calendar HTTP method.');
         }
 
@@ -77,6 +77,7 @@ final class moodle_oauth_http_client implements calendar_http_client {
         $payload = $body === null ? '' : json_encode($body, JSON_THROW_ON_ERROR);
 
         $response = match ($method) {
+            'DELETE' => $this->client->delete($url),
             'GET' => $this->client->get($url),
             'POST' => $this->client->post($url, $payload),
             'PATCH' => $this->client->patch($url, $payload),
