@@ -23,8 +23,9 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-use mod_googlemeet\client;
 use mod_googlemeet\local\oauth_manager;
+use mod_googlemeet\local\recording_manager;
+use mod_googlemeet\local\recording_oauth_manager;
 
 require_once(__DIR__ . '/../../config.php');
 require_once(__DIR__ . '/lib.php');
@@ -69,21 +70,56 @@ if (optional_param('managed', 0, PARAM_BOOL)) {
     exit;
 }
 
-$client = new client();
+if (optional_param('recordings', 0, PARAM_BOOL)) {
+    require_sesskey();
 
-// Post callback.
-$client->callback();
+    $googlemeetid = required_param('googlemeetid', PARAM_INT);
+    $issuerid = required_param('issuerid', PARAM_INT);
+    $configuredissuerid = recording_oauth_manager::configured_issuer_id();
+    if ($issuerid <= 0 || $issuerid !== $configuredissuerid) {
+        throw new moodle_exception('recordingsoauthunavailable', 'mod_googlemeet');
+    }
 
-// If this request is coming from a popup, close window and reload parent window.
-$js = <<<EOD
-<html>
-<head>
-    <script type="text/javascript">
-        window.opener.location.reload();
-        window.close();
-    </script>
-</head>
-<body></body>
-</html>
-EOD;
-die($js);
+    $googlemeet = $DB->get_record('googlemeet', ['id' => $googlemeetid], '*', MUST_EXIST);
+    $course = $DB->get_record('course', ['id' => $googlemeet->course], '*', MUST_EXIST);
+    $cm = get_coursemodule_from_instance('googlemeet', $googlemeetid, $course->id, false, MUST_EXIST);
+    require_login($course, true, $cm);
+    $context = context_module::instance($cm->id);
+    require_capability('mod/googlemeet:syncgoogledrive', $context);
+
+    $existingowner = (int) ($googlemeet->recordingowneruserid ?? 0);
+    if ($existingowner > 0 && $existingowner !== (int) $USER->id) {
+        throw new moodle_exception('recordingowneronly', 'mod_googlemeet');
+    }
+
+    $oauthclient = (new recording_oauth_manager())->authorization_client(
+        $issuerid,
+        (int) $USER->id,
+        $googlemeetid
+    );
+    if (!$oauthclient->is_logged_in()) {
+        throw new moodle_exception('recordingsoauthfailed', 'mod_googlemeet');
+    }
+
+    (new recording_manager())->claim_and_queue($googlemeetid, (int) $USER->id, $issuerid);
+
+    $PAGE->set_url('/mod/googlemeet/callback.php', [
+        'recordings' => 1,
+        'googlemeetid' => $googlemeetid,
+        'issuerid' => $issuerid,
+    ]);
+    $PAGE->set_context($context);
+    $PAGE->set_pagelayout('popup');
+    $PAGE->set_title(get_string('recordingsoauthconnected', 'mod_googlemeet'));
+    $PAGE->requires->js_init_code(
+        'if (window.opener) { window.opener.location.reload(); window.close(); }'
+    );
+
+    echo $OUTPUT->header();
+    echo $OUTPUT->notification(get_string('recordingsoauthconnected', 'mod_googlemeet'), 'success');
+    echo html_writer::tag('p', get_string('managedoauthclose', 'mod_googlemeet'));
+    echo $OUTPUT->footer();
+    exit;
+}
+
+throw new moodle_exception('invalidrequest', 'error');

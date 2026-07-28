@@ -14,19 +14,32 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace mod_googlemeet\api;
+
 /**
- * Plugin version and other meta-data are defined here.
+ * Google Meet recording API boundary.
  *
  * @package     mod_googlemeet
- * @copyright   2020 Rone Santos <ronefel@hotmail.com>
+ * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+interface recording_client {
 
-defined('MOODLE_INTERNAL') || die();
+    /**
+     * Lists conference records for one exact Meet code.
+     *
+     * @param string $meetingcode Normalized Meet code.
+     * @param string|null $pagetoken Continuation token.
+     * @return array<string, mixed>
+     */
+    public function list_conference_records(string $meetingcode, ?string $pagetoken = null): array;
 
-$plugin->component = 'mod_googlemeet';
-$plugin->release = '3.0.0-dev';
-$plugin->version = 2026072608;
-$plugin->requires = 2026042000; // Moodle 5.2.
-$plugin->supported = [502, 502];
-$plugin->maturity = MATURITY_ALPHA;
+    /**
+     * Lists recording artifacts for one conference record.
+     *
+     * @param string $conferencerecord Resource name.
+     * @param string|null $pagetoken Continuation token.
+     * @return array<string, mixed>
+     */
+    public function list_recordings(string $conferencerecord, ?string $pagetoken = null): array;
+}

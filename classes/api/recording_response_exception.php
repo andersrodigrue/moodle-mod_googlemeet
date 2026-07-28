@@ -14,33 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace mod_googlemeet;
-
-use PHPUnit\Framework\Attributes\CoversMethod;
+namespace mod_googlemeet\api;
 
 /**
- * Tests for the Google REST endpoint definitions.
+ * Signals an incomplete or inconsistent recording API response.
  *
  * @package     mod_googlemeet
- * @category    test
  * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-#[CoversMethod(rest::class, 'get_api_functions')]
-final class rest_test extends \advanced_testcase {
-
-    /**
-     * The plugin must not expose an endpoint that changes Drive permissions.
-     */
-    public function test_drive_permission_mutation_is_not_exposed(): void {
-        $reflection = new \ReflectionClass(rest::class);
-        $client = $reflection->newInstanceWithoutConstructor();
-        $functions = $client->get_api_functions();
-
-        $this->assertArrayNotHasKey('create_permission', $functions);
-
-        foreach ($functions as $function) {
-            $this->assertStringNotContainsString('/permissions', $function['endpoint']);
-        }
-    }
+final class recording_response_exception extends \RuntimeException {
 }

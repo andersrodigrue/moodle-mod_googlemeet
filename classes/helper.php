@@ -17,7 +17,6 @@
 namespace mod_googlemeet;
 
 use calendar_event;
-use moodle_exception;
 use stdClass;
 
 /**
@@ -31,32 +30,6 @@ class helper {
 
     /** @var string The googlemeet meeting_start event */
     public const GOOGLEMEET_EVENT_START = 'googlemeet_event';
-
-    /**
-     * Wrapper function to perform an API call and also catch and handle potential exceptions.
-     *
-     * @param rest $service The rest API object
-     * @param string $api The name of the API call
-     * @param array $params The parameters required by the API call
-     * @param string $rawpost Optional param to include in the body of a post.
-     *
-     * @return \stdClass The response object
-     * @throws moodle_exception
-     */
-    public static function request($service, $api, $params, $rawpost = false): ?\stdClass {
-        try {
-            $response = $service->call($api, $params, $rawpost);
-        } catch (\Exception $e) {
-            if ($e->getCode() == 403 && strpos($e->getMessage(), 'Access Not Configured') !== false) {
-                // This is raised when the Drive API service or the Calendar API service
-                // has not been enabled on Google APIs control panel.
-                throw new moodle_exception('servicenotenabled', 'mod_googlemeet');
-            }
-            throw $e;
-        }
-
-        return $response;
-    }
 
     /**
      * Generates an event in calendar after a googlemeet insert/update.

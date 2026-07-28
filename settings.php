@@ -42,6 +42,14 @@ if ($ADMIN->fulltree) {
         $options
     ));
 
+    $settings->add(new admin_setting_configselect(
+        'googlemeet/recordingissuerid',
+        get_string('recordingissuerid', 'googlemeet'),
+        get_string('recordingissuerid_desc', 'googlemeet'),
+        0,
+        $options
+    ));
+
     $settings->add(new admin_setting_configcheckbox(
         'googlemeet/multieventdateexpanded',
         get_string('multieventdateexpanded', 'googlemeet'),

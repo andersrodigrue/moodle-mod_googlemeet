@@ -165,5 +165,117 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
         upgrade_mod_savepoint(true, 2026072601, 'googlemeet');
     }
 
+    if ($oldversion < 2026072608) {
+        $table = new xmldb_table('googlemeet');
+        $fields = [
+            new xmldb_field('recordingowneruserid', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'timecreated'),
+            new xmldb_field(
+                'recordingoauthissuerid',
+                XMLDB_TYPE_INTEGER,
+                '10',
+                null,
+                null,
+                null,
+                null,
+                'recordingowneruserid'
+            ),
+            new xmldb_field(
+                'recordingsyncstatus',
+                XMLDB_TYPE_CHAR,
+                '32',
+                null,
+                XMLDB_NOTNULL,
+                null,
+                'disconnected',
+                'recordingoauthissuerid'
+            ),
+            new xmldb_field(
+                'recordingsyncattempts',
+                XMLDB_TYPE_INTEGER,
+                '10',
+                null,
+                XMLDB_NOTNULL,
+                null,
+                '0',
+                'recordingsyncstatus'
+            ),
+            new xmldb_field(
+                'recordinglasterrorcode',
+                XMLDB_TYPE_CHAR,
+                '100',
+                null,
+                null,
+                null,
+                null,
+                'recordingsyncattempts'
+            ),
+            new xmldb_field(
+                'recordinglasterrormessage',
+                XMLDB_TYPE_TEXT,
+                null,
+                null,
+                null,
+                null,
+                null,
+                'recordinglasterrorcode'
+            ),
+            new xmldb_field(
+                'recordingtimelastattempt',
+                XMLDB_TYPE_INTEGER,
+                '10',
+                null,
+                null,
+                null,
+                null,
+                'recordinglasterrormessage'
+            ),
+        ];
+        foreach ($fields as $field) {
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+
+        $indexes = [
+            new xmldb_index('recordingowneruserid', XMLDB_INDEX_NOTUNIQUE, ['recordingowneruserid']),
+            new xmldb_index('recordingsyncstatus', XMLDB_INDEX_NOTUNIQUE, ['recordingsyncstatus']),
+        ];
+        foreach ($indexes as $index) {
+            if (!$dbman->index_exists($table, $index)) {
+                $dbman->add_index($table, $index);
+            }
+        }
+
+        // Remove duplicate references before enforcing activity-scoped idempotency.
+        $recordset = $DB->get_recordset(
+            'googlemeet_recordings',
+            null,
+            'googlemeetid ASC, recordingid ASC, id ASC',
+            'id, googlemeetid, recordingid'
+        );
+        $seen = [];
+        foreach ($recordset as $recording) {
+            $key = $recording->googlemeetid . ':' . $recording->recordingid;
+            if (isset($seen[$key])) {
+                $DB->delete_records('googlemeet_recordings', ['id' => $recording->id]);
+                continue;
+            }
+            $seen[$key] = true;
+        }
+        $recordset->close();
+
+        $recordingtable = new xmldb_table('googlemeet_recordings');
+        $recordingindex = new xmldb_index(
+            'activityrecording',
+            XMLDB_INDEX_UNIQUE,
+            ['googlemeetid', 'recordingid']
+        );
+        if (!$dbman->index_exists($recordingtable, $recordingindex)) {
+            $dbman->add_index($recordingtable, $recordingindex);
+        }
+
+        upgrade_mod_savepoint(true, 2026072608, 'googlemeet');
+    }
+
     return true;
 }

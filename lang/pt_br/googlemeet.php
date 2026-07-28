@@ -30,9 +30,6 @@ $string['issuerid'] = 'Serviço OAuth';
 $string['issuerid_desc'] = '<a href="https://github.com/ronefel/moodle-mod_googlemeet/wiki/Como-criar-o-ID-do-cliente-e-a-Chave-secreta-do-cliente" target="_blank">Como configurar um Serviço OAuth</a>';
 $string['calendareventname'] = '{$a} está agendado para';
 $string['checkweekdays'] = 'Selecione os dias da semana que se enquadram no intervalo de datas selecionado.';
-$string['creatoremail'] = 'E-mail do organizador';
-$string['creatoremail_error'] = 'Digite um e-mail válido';
-$string['creatoremail_help'] = 'E-mail do organizador do evento';
 $string['date'] = 'Data';
 $string['duration'] = 'Duração';
 $string['earlierto'] = 'A data do evento não pode ser anterior à data de início do curso ({$a}).';
@@ -81,7 +78,6 @@ $string['integrationmode_help'] = 'O modo gerenciado cria e reconcilia o evento 
     . 'do Agenda.';
 $string['integrationmodemanaged'] = 'Criar e gerenciar com o Google Agenda';
 $string['integrationmodemanual'] = 'Usar um link existente do Google Meet';
-$string['isnotcreatoremail'] = 'Entre com a conta do organizador ou altere o e-mail do organizador nas configurações para sincronizar as gravações.';
 $string['jstableinfo'] = 'Mostrando {start} a {end} de {rows} gravações';
 $string['jstableinfofiltered'] = 'Mostrando {start} a {end} de {rows} gravações (filtrado de {rowsTotal} gravações)';
 $string['jstableloading'] = 'Carregando...';
@@ -156,11 +152,9 @@ $string['repeatuntil'] = 'Repetir até';
 $string['roomcreator'] = 'Organizador:';
 $string['roomname'] = 'Nome da sala';
 $string['roomurl'] = 'URL da sala';
-$string['roomurl_caution'] = '<strong>Cuidado!</strong> Se a URL da sala ou o E-mail do organizador for alterado, as gravações já sincronizadas podem ser removidas na próxima sincronização.';
 $string['roomurl_desc'] = 'A URL da sala será gerada automaticamente.';
 $string['roomurlexpanded'] = 'URL da sala expandido';
 $string['roomurlexpanded_desc'] = 'Mostrar as configurações de "URL da sala" expandidas por padrão ao criar uma nova sala.';
-$string['servicenotenabled'] = 'Acesso não configurado. Certifique-se de que os serviços \'Google Drive API\' e \'Google Calendar API\' estejam ativados.';
 $string['sessionexpired'] = 'A sessão da sua conta do Google expirou no meio do processo, faça login novamente.';
 $string['show'] = 'Mostrar';
 $string['strftimedm'] = '%a. %d %b.';
@@ -222,22 +216,6 @@ $string['syncerrorcode'] = 'Código do erro';
 $string['syncerrormessage'] = 'Mensagem segura do erro';
 $string['synclastattempt'] = 'Última tentativa: {$a}';
 $string['synchronisetask'] = 'Sincronizar atividade do Google Meet';
-$string['syncwithgoogledrive'] = 'Sincronizar com o Google Drive';
-$string['sync_info'] = 'Aguarde ao menos 10 minutos para que o arquivo da gravação seja gerado e salvo em "Meu Drive > Meet Recordings" do organizador.
-<p></p>
-Para remover uma gravação primeiro exclua o arquivo da gravação do Google Drive e depois clique no botão sincronizar acima.
-<p></p>
-Para gravar uma reunião, confira se:
-<ul>
-    <li>você não atingiu sua cota pessoal do Drive;</li>
-    <li>sua organização não atingiu a cota do Drive.</li>
-</ul>
-Não será possível gravar a reunião se a organização não tiver espaço no Drive, mesmo que você tenha.
-<p></p>
-Para mais informações, veja esse artigo da Central de Ajuda:
-<br>
-<a href="https://notifications.google.com/g/p/APNL1TjJltVk6EcLPyFTJ8V_9ty1FeTAD0XSSJVLiaWPezIaQKfIPd1kGURFUMVV3I5yHgVZoOgxkl4gySV-4SCf2pZ27Vk8Iy9DnHSQBqtK51uG3Gyz" target="_blank" rel="nofollow noopener">https://support.google.com/meet/answer/9308681</a>';
-$string['sync_notloggedin'] = 'Faça login na sua conta do Google para sincronizar a gravação do Google Meet com o Moodle';
 $string['thereisnorecordingtoshow'] = 'Não há gravação para mostrar.';
 $string['timeahead'] = 'Não é possível criar várias recorrências da data do evento que excedam um ano, ajuste as datas de início e término.';
 $string['timedate'] = '%d/%m/%Y %H:%M';
@@ -249,3 +227,32 @@ $string['url_failed'] = 'É obrigatório uma URL válida do Google Meet';
 $string['url_help'] = 'Ex. https://meet.google.com/aaa-aaaa-aaa';
 $string['visible'] = 'Visível';
 $string['week'] = 'Semana(s)';
+$string['recordingissuerid'] = 'Serviço OAuth para gravações';
+$string['recordingissuerid_desc'] = 'Selecione um serviço OAuth do Google dedicado à descoberta de gravações. Ele '
+    . 'deve ser diferente do serviço usado para Agenda/login e solicitar somente o escopo de leitura do Google Meet '
+    . 'quando o professor conectar as gravações.';
+$string['recordingowneronly'] = 'Somente o professor que conectou a descoberta de gravações pode sincronizar esta atividade.';
+$string['recordingsoauthconnect'] = 'Conectar gravações do Google Meet';
+$string['recordingsoauthconnected'] = 'A descoberta de gravações do Google Meet está conectada para este professor.';
+$string['recordingsoauthfailed'] = 'Não foi possível concluir a autorização das gravações do Google Meet.';
+$string['recordingsoauthrequired'] = 'O proprietário das gravações precisa reconectar o Google Meet antes de continuar '
+    . 'a descoberta.';
+$string['recordingsoauthunavailable'] = 'Configure um serviço OAuth do Google dedicado à descoberta de gravações. Ele '
+    . 'deve ser diferente do serviço usado para Agenda/login.';
+$string['recordingsactivitymissing'] = 'A descoberta de gravações ignorou a atividade Google Meet {$a}, pois ela não '
+    . 'existe mais.';
+$string['recordingsapifailed'] = 'O Google Meet rejeitou a solicitação de descoberta de gravações.';
+$string['recordingsdiscovertask'] = 'Descobrir gravações do Google Meet';
+$string['recordingsinvalidaction'] = 'A ação solicitada para as gravações é inválida.';
+$string['recordingsqueued'] = 'A descoberta de gravações foi enfileirada.';
+$string['recordingsresponseinvalid'] = 'O Google Meet retornou uma resposta de gravação inválida.';
+$string['recordingsstateskipped'] = 'A descoberta de gravações ignorou a atividade {$a->id} no estado {$a->state}.';
+$string['recordingssync'] = 'Descobrir gravações';
+$string['recordingsynced'] = 'A descoberta de gravações foi concluída para a atividade {$a->id}: {$a->count} '
+    . 'artefato(s) gerado(s) encontrado(s).';
+$string['recordingsyncstatus'] = 'Estado da descoberta de gravações';
+$string['recordingsyncstatusdisconnected'] = 'Desconectada';
+$string['recordingsyncstatusfailed'] = 'Falhou';
+$string['recordingsyncstatusqueued'] = 'Na fila';
+$string['recordingsyncstatusready'] = 'Pronta';
+$string['recordingsyncstatussyncing'] = 'Sincronizando';

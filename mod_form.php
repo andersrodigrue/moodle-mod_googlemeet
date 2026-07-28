@@ -230,11 +230,6 @@ class mod_googlemeet_mod_form extends moodleform_mod {
         $mform->addHelpButton('url', 'url', 'googlemeet');
         $mform->disabledIf('url', 'integrationmode', 'neq', integration_mode::MANUAL);
 
-        $mform->addElement('text', 'creatoremail', get_string('creatoremail', 'googlemeet'), ['size' => '50']);
-        $mform->setType('creatoremail', PARAM_EMAIL);
-        $mform->addHelpButton('creatoremail', 'creatoremail', 'googlemeet');
-        $mform->disabledIf('creatoremail', 'integrationmode', 'neq', integration_mode::MANUAL);
-
         $mform->addElement('header', 'headernotification', get_string('notification', 'googlemeet'));
         if (!empty($config->notificationexpanded)) {
             $mform->setExpanded('headernotification');
@@ -329,9 +324,6 @@ class mod_googlemeet_mod_form extends moodleform_mod {
         $mode = (string) ($data['integrationmode'] ?? '');
         if ($mode === integration_mode::MANUAL) {
             $errors = $this->validate_url((string) ($data['url'] ?? ''), $errors);
-            if (!validate_email((string) ($data['creatoremail'] ?? ''))) {
-                $errors['creatoremail'] = get_string('creatoremail_error', 'googlemeet');
-            }
         } else if ($mode === integration_mode::MANAGED) {
             if (
                 !empty($this->current->instance) &&

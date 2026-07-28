@@ -25,14 +25,6 @@
 defined('MOODLE_INTERNAL') || die();
 
 $functions = array(
-    'mod_googlemeet_sync_recordings' => array(
-        'classname' => 'mod_googlemeet_external',
-        'methodname' => 'sync_recordings',
-        'description' => '',
-        'type' => 'write',
-        'ajax' => true,
-        'capabilities' => 'mod/googlemeet:syncgoogledrive',
-    ),
     'mod_googlemeet_recording_edit_name' => array(
         'classname' => 'mod_googlemeet_external',
         'methodname' => 'recording_edit_name',

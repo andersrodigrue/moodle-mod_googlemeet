@@ -24,8 +24,10 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-use mod_googlemeet\client;
+use mod_googlemeet\api\recording_authorization_exception;
 use mod_googlemeet\helper;
+use mod_googlemeet\local\recording_oauth_manager;
+use mod_googlemeet\local\recording_sync_state;
 
 require_once("$CFG->dirroot/mod/googlemeet/lib.php");
 
@@ -199,18 +201,12 @@ function googlemeet_set_events($googlemeet, $events) {
  * @return void
  */
 function googlemeet_print_recordings($googlemeet, $cm, $context) {
-    global $CFG, $PAGE, $OUTPUT;
-
-    $config = get_config('googlemeet');
-
-    $client = new client();
-    if (!$client->enabled) {
-        return;
-    }
+    global $CFG, $OUTPUT, $PAGE, $USER;
 
     $params = ['googlemeetid' => $googlemeet->id];
-    $hascapability = has_capability('mod/googlemeet:editrecording', $context);
-    if (!$hascapability) {
+    $caneditrecordings = has_capability('mod/googlemeet:editrecording', $context);
+    $cansyncrecordings = has_capability('mod/googlemeet:syncgoogledrive', $context);
+    if (!$caneditrecordings) {
         $params['visible'] = true;
     }
 
@@ -221,47 +217,91 @@ function googlemeet_print_recordings($googlemeet, $cm, $context) {
     $html .= $OUTPUT->render_from_template('mod_googlemeet/recordingstable', [
         'recordings' => $recordings,
         'coursemoduleid' => $cm->id,
-        'hascapability' => $hascapability
+        'hascapability' => $caneditrecordings
     ]);
 
     $PAGE->requires->js(new moodle_url($CFG->wwwroot . '/mod/googlemeet/assets/js/build/jstable.min.js'));
 
-    if ($hascapability) {
+    if ($cansyncrecordings) {
         $lastsync = get_string('never', 'googlemeet');
         if ($googlemeet->lastsync) {
             $lastsync = userdate($googlemeet->lastsync, get_string('timedate', 'googlemeet'));
         }
 
-        $redordingname = '"' . substr($googlemeet->url, 24, 12) . '" ';
-        if ($googlemeet->originalname) {
-            $redordingname .= get_string('or', 'googlemeet') . ' "' . $googlemeet->originalname . '"';
+        $state = (string) ($googlemeet->recordingsyncstatus ?? recording_sync_state::DISCONNECTED);
+        if (!in_array($state, [
+            recording_sync_state::DISCONNECTED,
+            recording_sync_state::QUEUED,
+            recording_sync_state::SYNCING,
+            recording_sync_state::READY,
+            recording_sync_state::FAILED,
+        ], true)) {
+            $state = recording_sync_state::FAILED;
+        }
+        $status = html_writer::tag(
+            'p',
+            get_string('lastsync', 'mod_googlemeet') . ': ' . html_writer::tag('strong', $lastsync)
+        );
+        $status .= html_writer::tag(
+            'p',
+            get_string('recordingsyncstatus', 'mod_googlemeet') . ': '
+                . html_writer::tag('strong', get_string('recordingsyncstatus' . $state, 'mod_googlemeet'))
+        );
+
+        if (!empty($googlemeet->recordinglasterrormessage)) {
+            $status .= $OUTPUT->notification(
+                s((string) $googlemeet->recordinglasterrormessage),
+                'warning'
+            );
         }
 
-        $loginhtml = '';
-        $syncbutton = '';
-        $islogged = false;
-        $isloggedcreatoremail = $client->get_email() === $googlemeet->creatoremail;
-        if (!$client->check_login()) {
-            $loginhtml = $client->print_login_popup();
+        $issuerid = recording_oauth_manager::configured_issuer_id();
+        $recordingowner = (int) ($googlemeet->recordingowneruserid ?? 0);
+        if ($issuerid <= 0) {
+            $status .= $OUTPUT->notification(
+                get_string('recordingsoauthunavailable', 'mod_googlemeet'),
+                'warning'
+            );
+        } else if ($recordingowner > 0 && $recordingowner !== (int) $USER->id) {
+            $status .= $OUTPUT->notification(get_string('recordingowneronly', 'mod_googlemeet'), 'info');
         } else {
-            $islogged = true;
-            $loginhtml = $client->print_user_info('drive');
-
-            $url = new moodle_url($PAGE->url);
-            $url->param('sync', true);
-            $syncbutton = new single_button($url, get_string('syncwithgoogledrive', 'googlemeet'), 'post', true);
-            $syncbutton = $OUTPUT->render($syncbutton);
+            try {
+                $oauthclient = (new recording_oauth_manager())->authorization_client(
+                    $issuerid,
+                    (int) $USER->id,
+                    (int) $googlemeet->id
+                );
+                if ($oauthclient->is_logged_in()) {
+                    $button = new single_button(
+                        new moodle_url('/mod/googlemeet/recordings.php', [
+                            'id' => $cm->id,
+                            'action' => 'sync',
+                        ]),
+                        get_string('recordingssync', 'mod_googlemeet'),
+                        'post',
+                        true
+                    );
+                    $status .= $OUTPUT->render($button);
+                } else {
+                    $status .= html_writer::link(
+                        $oauthclient->get_login_url(),
+                        get_string('recordingsoauthconnect', 'mod_googlemeet'),
+                        [
+                            'class' => 'btn btn-primary',
+                            'target' => '_blank',
+                            'rel' => 'noopener',
+                        ]
+                    );
+                }
+            } catch (recording_authorization_exception | moodle_exception) {
+                $status .= $OUTPUT->notification(
+                    get_string('recordingsoauthunavailable', 'mod_googlemeet'),
+                    'warning'
+                );
+            }
         }
 
-        $html .= $OUTPUT->render_from_template('mod_googlemeet/syncbutton', [
-            'lastsync' => $lastsync,
-            'creatoremail' => $googlemeet->creatoremail,
-            'redordingname' => $redordingname,
-            'login' => $loginhtml,
-            'islogged' => $islogged,
-            'syncbutton' => $syncbutton,
-            'isloggedcreatoremail' => $isloggedcreatoremail
-        ]);
+        $html .= html_writer::div($status, 'mt-4', ['id' => 'googlemeet_recording_sync']);
     }
 
     $html .= '</div>';

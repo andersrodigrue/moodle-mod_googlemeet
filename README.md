@@ -1,9 +1,12 @@
-# Google Meet™ for Moodle #
+# Google Meet™ for Moodle
 
-The Google Meet™ for Moodle plugin allows the teacher, without having to leave Moodle, to create a Google Meet room and make available to the students the recordings of the room saved in Google Drive.
+The Google Meet™ for Moodle plugin lets a teacher create and manage a Google
+Meet room without leaving Moodle and publish links to generated meeting
+recordings.
 
-To create the Google Meet meeting room from Moodle, the Google Meet™ plugin for Moodle needs an active OAuth 2 service for Google.
-To learn how to set up an OAuth 2 service for Google, click [here](https://github.com/ronefel/moodle-mod_googlemeet/wiki/How-to-create-Client-ID-and-Client-Secret).
+This fork preserves the original GPL history and is being modernized for Moodle
+5.2. See [the modernization foundation](docs/MODERNIZATION.md) for the current
+migration status and compatibility boundaries.
 
 <div>
 <img src="https://ronefel.nimbusweb.me/box/attachment/8669013/93arpv0xye1v1fuw44bs/RFOdRT6UcpaK9F8a/screen1.png" alt="screen1.png" width="270" />
@@ -15,6 +18,7 @@ To learn how to set up an OAuth 2 service for Google, click [here](https://githu
 </div>
 
 ## Requirements
+
 Moodle 5.2.x
 
 PHP 8.3 or 8.4
@@ -23,14 +27,42 @@ The `3.0.0-dev` development line is an alpha modernization and is not intended f
 production use yet.
 
 ## Installation
+
 1.  Copy this plugin to the `mod\googlemeet` folder on the server
 2.  Login as administrator
 3.  Go to Site Administrator > Notification
 4.  Install the plugin
 
-This fork preserves the original GPL history and is being modernized specifically for
-Moodle 5.2. See [the modernization foundation](docs/MODERNIZATION.md) for the current
-migration status and compatibility boundaries.
+## Google OAuth configuration
+
+The development version separates the two per-teacher Google grants:
+
+- The Calendar issuer creates, updates and cancels the meeting event with the
+  `calendar.events` scope.
+- A second, dedicated recording issuer discovers generated recording metadata
+  with only the `meetings.space.readonly` scope.
+
+Create two Google OAuth 2 services in Moodle and select them under
+**Site administration > Plugins > Activity modules > Google Meet**. The
+recording issuer must be different from the Calendar issuer. It must use the
+Google authorization endpoint and must not be shared with Google login.
+
+The recording flow uses the Google Meet REST API. It finds conference records
+with an exact normalized meeting-code filter, follows bounded pagination, and
+accepts only `FILE_GENERATED` artifacts. It stores the validated Drive file ID
+and playback URI returned by Meet; it does not scan a localized Drive folder,
+request a broad Drive scope, change Drive permissions, or associate files by
+activity title.
+
+Conference records can expire remotely. Consequently, a discovery response
+that omits an existing artifact never deletes the local recording reference.
+Recording references and recording OAuth ownership are also excluded from
+activity backup and restore.
+
+Authorization is explicit and per teacher. A user with the recording
+synchronization capability connects Google from the activity page and starts
+discovery through a session-protected POST action. Discovery then runs in an
+owner-scoped ad hoc task with retry handling for transient API failures.
 
 Managed meetings now support asynchronous creation, reconciliation and explicit
 owner-only cancellation. Retry, reconnect and cancel commands are submitted through
@@ -45,7 +77,7 @@ never clone OAuth ownership or remote Calendar identity into a restored activity
 
 If you discover any security related issues, please email [ronefel@hotmail.com](mailto:ronefel@hotmail.com) instead of using the issue tracker.
 
-## License ##
+## License
 
 2020 Rone Santos <ronefel@hotmail.com>
 

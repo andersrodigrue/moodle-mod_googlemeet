@@ -39,10 +39,8 @@ class backup_googlemeet_activity_structure_step extends backup_activity_structur
             'name',
             'originalname',
             'url',
-            'creatoremail',
             'intro',
             'introformat',
-            'lastsync',
             'eventdate',
             'starthour',
             'startminute',
@@ -72,30 +70,14 @@ class backup_googlemeet_activity_structure_step extends backup_activity_structur
             'timemodified'
         ]);
 
-        $recordings = new backup_nested_element('recordings');
-        $recording = new backup_nested_element('recording', ['id'], [
-            'recordingid',
-            'name',
-            'createdtime',
-            'duration',
-            'webviewlink',
-            'visible',
-            'timemodified'
-        ]);
-
         // Build the tree in the order needed for restore.
         $googlemeet->add_child($events);
         $events->add_child($event);
-
-        $googlemeet->add_child($recordings);
-        $recordings->add_child($recording);
 
         // Define the source tables for the elements.
         $googlemeet->set_source_table('googlemeet', ['id' => backup::VAR_ACTIVITYID]);
 
         $event->set_source_table('googlemeet_events', ['googlemeetid' => backup::VAR_PARENTID]);
-
-        $recording->set_source_table('googlemeet_recordings', ['googlemeetid' => backup::VAR_PARENTID]);
 
         // Define id annotations.
 

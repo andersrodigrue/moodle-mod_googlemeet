@@ -200,6 +200,7 @@ function googlemeet_prepare_integration(
         $googlemeet->url = $url;
         $googlemeet->meetinguri = $url;
         $googlemeet->integrationmode = integration_mode::MANUAL;
+        $googlemeet->creatoremail = null;
         $googlemeet->owneruserid = null;
         $googlemeet->oauthissuerid = null;
         $googlemeet->calendarid = null;
@@ -397,94 +398,4 @@ function mod_googlemeet_get_fontawesome_icon_map() {
         'mod_googlemeet:logout' => 'fa-sign-out',
         'mod_googlemeet:play' => 'fa-play'
     ];
-}
-
-/**
- * Synchronizes Google Drive recordings with the database.
- *
- * @param int $googlemeetid the googlemeet ID
- * @param array $files the array of recordings
- * @return array of recordings
- */
-function sync_recordings($googlemeetid, $files) {
-    global $DB;
-
-    $cm = get_coursemodule_from_instance('googlemeet', $googlemeetid, 0, false, MUST_EXIST);
-    $context = context_module::instance($cm->id);
-    require_capability('mod/googlemeet:syncgoogledrive', $context);
-
-    $googlemeetrecordings = $DB->get_records('googlemeet_recordings', ['googlemeetid' => $googlemeetid]);
-
-    $recordingids = array_column($googlemeetrecordings, 'recordingid');
-    $fileids = array_column($files, 'recordingId');
-
-    $updaterecordings = [];
-    $insertrecordings = [];
-    $deleterecordings = [];
-
-    foreach ($files as $file) {
-        if (!isset($file->unprocessed)) {
-            if (in_array($file->recordingId, $recordingids, true)) {
-                array_push($updaterecordings, $file);
-            } else {
-                array_push($insertrecordings, $file);
-            }
-        }
-    }
-
-    foreach ($googlemeetrecordings as $googlemeetrecording) {
-        if (!in_array($googlemeetrecording->recordingid, $fileids)) {
-            $deleterecordings['id'] = $googlemeetrecording->id;
-        }
-    }
-
-    if ($deleterecordings) {
-        $DB->delete_records('googlemeet_recordings', $deleterecordings);
-    }
-
-    if ($updaterecordings) {
-        foreach ($updaterecordings as $updaterecording) {
-            $recording = $DB->get_record('googlemeet_recordings', [
-                'googlemeetid' => $googlemeetid,
-                'recordingid' => $updaterecording->recordingId
-            ]);
-
-            $recording->createdtime = $updaterecording->createdTime;
-            $recording->duration = $updaterecording->duration;
-            $recording->webviewlink = $updaterecording->webViewLink;
-            $recording->timemodified = time();
-
-            $DB->update_record('googlemeet_recordings', $recording);
-        }
-
-        $googlemeetrecord = $DB->get_record('googlemeet', ['id' => $googlemeetid]);
-        $googlemeetrecord->lastsync = time();
-        $DB->update_record('googlemeet', $googlemeetrecord);
-    }
-
-    if ($insertrecordings) {
-        $recordings = [];
-
-        foreach ($insertrecordings as $insertrecording) {
-            $recording = new stdClass();
-            $recording->googlemeetid = $googlemeetid;
-            $recording->recordingid = $insertrecording->recordingId;
-            $recording->name = $insertrecording->name;
-            $recording->createdtime = $insertrecording->createdTime;
-            $recording->duration = $insertrecording->duration;
-            $recording->webviewlink = $insertrecording->webViewLink;
-            $recording->timemodified = time();
-
-            array_push($recordings, $recording);
-        }
-
-        $DB->insert_records('googlemeet_recordings', $recordings);
-
-        $googlemeetrecord = $DB->get_record('googlemeet', ['id' => $googlemeetid]);
-        $googlemeetrecord->lastsync = time();
-
-        $DB->update_record('googlemeet', $googlemeetrecord);
-    }
-
-    return googlemeet_list_recordings(['googlemeetid' => $googlemeetid]);
 }

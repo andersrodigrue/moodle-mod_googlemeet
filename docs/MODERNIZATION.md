@@ -223,16 +223,59 @@ course overview and defines safe backup semantics:
   `disconnected`, with no join URI or remote identity;
 - an authorized teacher can explicitly claim an ownerless restored managed copy,
   which will create a distinct event for the new activity;
-- remote recordings continue to use the legacy backup behavior and remain outside
-  the managed Calendar authorization.
+- recording references are addressed by the separate recording-discovery boundary
+  described below and are not transported by backup.
 
 These rules prevent a duplicated course or imported backup from controlling the
 same external event as its source.
 
+## Exact and least-privilege recording discovery
+
+The eighth structural slice replaces the remaining legacy Drive recording client:
+
+- recording discovery uses the Google Meet REST API instead of listing a localized
+  `Meet Recordings` folder in Drive;
+- conference records are selected through the exact normalized
+  `space.meeting_code` filter; activity titles and folder names are never accepted
+  as association keys;
+- only `FILE_GENERATED` recording resources are persisted;
+- the Meet response must contain a valid recording parent, bounded Drive file ID,
+  RFC 3339 time range and an HTTPS `drive.google.com` playback URI bound to that
+  same file ID;
+- conference and recording lists follow opaque page tokens with loop detection and
+  a hard 100-page limit;
+- the application stores each Drive file ID at most once per activity and preserves
+  teacher-edited recording names and visibility on later discoveries;
+- remote absence never deletes a local recording reference, because Meet conference
+  records can expire and an incomplete remote response is not proof of deletion;
+- the browser no longer submits a caller-controlled array of Drive files to an AJAX
+  synchronization method;
+- the legacy broad Drive client, generic REST wrapper, GET synchronization action
+  and Drive-folder template are removed;
+- a dedicated recording OAuth issuer requests only
+  `https://www.googleapis.com/auth/meetings.space.readonly`;
+- the recording issuer must differ from the Calendar/login issuer, preventing
+  Moodle's issuer-level token lookup from ambiguously reusing a refresh token with
+  a different grant;
+- bearer requests are restricted to HTTPS on `meet.googleapis.com`;
+- authorization is explicit, per teacher and protected by capability and session
+  key checks;
+- discovery runs as an owner-scoped ad hoc task with five attempts; authorization
+  failures become `disconnected`, permanent or malformed responses become `failed`,
+  and transient transport failures remain retryable;
+- backup excludes recording references, recording ownership, issuer IDs and
+  operational state; restored activities always require a fresh recording
+  connection;
+- the obsolete organizer-email form field is no longer collected.
+
+This boundary intentionally does not request a Drive API scope and never mutates
+Drive permissions. The Drive file ID and playback URI are metadata returned by the
+Meet API for a generated recording.
+
 ## Next structural slice
 
-The next slice should isolate the remaining legacy Drive recording flow from the
-managed Calendar client. It must preserve explicit consent and avoid silently
-adding Drive scopes to the per-teacher Calendar authorization. Activity deletion,
-privacy exports and recovery behavior should be reviewed again after that boundary
-is separated.
+The next slice should complete the privacy and lifecycle audit now that Calendar
+and recording authorization are separate. It should declare and exercise the
+activity-owner and recording-owner data paths in Moodle's Privacy API, verify
+user-deletion behavior without deleting shared course content, and review recovery
+and explicit recording-disconnect commands.

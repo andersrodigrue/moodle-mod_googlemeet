@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="mod/googlemeet/db" VERSION="20260726" COMMENT="XMLDB file for Moodle mod_googlemeet"
+<XMLDB PATH="mod/googlemeet/db" VERSION="20260728" COMMENT="XMLDB file for Moodle mod_googlemeet"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -51,6 +51,13 @@
         <FIELD NAME="lasterrormessage" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Sanitized message from the last synchronization error."/>
         <FIELD NAME="timelastattempt" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Timestamp of the last synchronization attempt."/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the activity was created."/>
+        <FIELD NAME="recordingowneruserid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Moodle user who owns the recording authorization."/>
+        <FIELD NAME="recordingoauthissuerid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Dedicated OAuth issuer used for recording discovery."/>
+        <FIELD NAME="recordingsyncstatus" TYPE="char" LENGTH="32" NOTNULL="true" DEFAULT="disconnected" SEQUENCE="false" COMMENT="Current recording discovery state."/>
+        <FIELD NAME="recordingsyncattempts" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Number of recording discovery attempts."/>
+        <FIELD NAME="recordinglasterrorcode" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Sanitized code from the last recording discovery error."/>
+        <FIELD NAME="recordinglasterrormessage" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Sanitized recording discovery error message."/>
+        <FIELD NAME="recordingtimelastattempt" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Timestamp of the last recording discovery attempt."/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -59,6 +66,8 @@
         <INDEX NAME="course" UNIQUE="false" FIELDS="course"/>
         <INDEX NAME="owneruserid" UNIQUE="false" FIELDS="owneruserid"/>
         <INDEX NAME="syncstatus" UNIQUE="false" FIELDS="syncstatus"/>
+        <INDEX NAME="recordingowneruserid" UNIQUE="false" FIELDS="recordingowneruserid"/>
+        <INDEX NAME="recordingsyncstatus" UNIQUE="false" FIELDS="recordingsyncstatus"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="googlemeet_events" COMMENT="Stores the googlemeet events.">
@@ -90,6 +99,9 @@
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="googlemeetidfk" TYPE="foreign" FIELDS="googlemeetid" REFTABLE="googlemeet" REFFIELDS="id"/>
       </KEYS>
+      <INDEXES>
+        <INDEX NAME="activityrecording" UNIQUE="true" FIELDS="googlemeetid, recordingid"/>
+      </INDEXES>
     </TABLE>
     <TABLE NAME="googlemeet_notify_done" COMMENT="Stores references from Google Meet recordings.">
       <FIELDS>

@@ -22,7 +22,6 @@
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-use mod_googlemeet\client;
 use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\sync_state;
 use mod_googlemeet\output\sync_status;
@@ -54,18 +53,6 @@ require_capability('mod/googlemeet:view', $context);
 
 $PAGE->set_url('/mod/googlemeet/view.php', array('id' => $cm->id));
 $PAGE->set_context($context);
-
-if (has_capability('mod/googlemeet:editrecording', $context)) {
-    $client = new client();
-    $logout = optional_param('logout', 0, PARAM_BOOL);
-    if ($logout) {
-        $client->logout();
-    }
-    $sync = optional_param('sync', 0, PARAM_BOOL);
-    if ($sync) {
-        $client->syncrecordings($googlemeet);
-    }
-}
 
 // Prefer the validated managed URI while retaining the legacy URL fallback.
 $url = trim((string) ($googlemeet->meetinguri ?: $googlemeet->url));

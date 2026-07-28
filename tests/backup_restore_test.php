@@ -17,6 +17,7 @@
 namespace mod_googlemeet;
 
 use mod_googlemeet\local\integration_mode;
+use mod_googlemeet\local\recording_sync_state;
 use mod_googlemeet\local\sync_state;
 use restore_date_testcase;
 
@@ -81,7 +82,7 @@ final class backup_restore_test extends restore_date_testcase {
         $course = $this->getDataGenerator()->create_course(['startdate' => $this->startdate]);
         $owner = $this->getDataGenerator()->create_user();
         $start = $course->startdate + DAYSECS;
-        $this->getDataGenerator()->get_plugin_generator('mod_googlemeet')->create_instance([
+        $source = $this->getDataGenerator()->get_plugin_generator('mod_googlemeet')->create_instance([
             'course' => $course->id,
             'name' => 'Managed backup',
             'integrationmode' => integration_mode::MANAGED,
@@ -107,6 +108,24 @@ final class backup_restore_test extends restore_date_testcase {
             'lasterrorcode' => 'old_error',
             'lasterrormessage' => 'Old error',
             'timelastattempt' => $start - HOURSECS,
+            'recordingowneruserid' => $owner->id,
+            'recordingoauthissuerid' => 43,
+            'recordingsyncstatus' => recording_sync_state::READY,
+            'recordingsyncattempts' => 2,
+            'recordinglasterrorcode' => 'old_recording_error',
+            'recordinglasterrormessage' => 'Old recording error',
+            'recordingtimelastattempt' => $start - HOURSECS,
+            'lastsync' => $start,
+        ]);
+        $DB->insert_record('googlemeet_recordings', (object) [
+            'googlemeetid' => $source->id,
+            'recordingid' => 'DriveFile_12345',
+            'name' => 'Private recording reference',
+            'createdtime' => $start,
+            'duration' => '1:00:00',
+            'webviewlink' => 'https://drive.google.com/file/d/DriveFile_12345/view',
+            'visible' => 1,
+            'timemodified' => $start,
         ]);
 
         $newcourseid = $this->backup_and_restore($course);
@@ -139,5 +158,19 @@ final class backup_restore_test extends restore_date_testcase {
         $this->assertNull($restored->conferencestatus);
         $this->assertSame(0, (int) $restored->syncattempts);
         $this->assertNull($restored->timelastattempt);
+        $this->assertNull($restored->recordingowneruserid);
+        $this->assertNull($restored->recordingoauthissuerid);
+        $this->assertSame(
+            recording_sync_state::DISCONNECTED,
+            $restored->recordingsyncstatus
+        );
+        $this->assertSame(0, (int) $restored->recordingsyncattempts);
+        $this->assertNull($restored->recordinglasterrorcode);
+        $this->assertNull($restored->recordinglasterrormessage);
+        $this->assertNull($restored->recordingtimelastattempt);
+        $this->assertNull($restored->lastsync);
+        $this->assertSame(0, $DB->count_records('googlemeet_recordings', [
+            'googlemeetid' => $restored->id,
+        ]));
     }
 }

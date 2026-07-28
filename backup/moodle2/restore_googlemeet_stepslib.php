@@ -41,9 +41,6 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
         $paths[] = new restore_path_element('googlemeet_event',
             '/activity/googlemeet/events/event');
 
-        $paths[] = new restore_path_element('googlemeet_recording',
-            '/activity/googlemeet/recordings/recording');
-
         return $this->prepare_activity_structure($paths);
     }
 
@@ -98,6 +95,15 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
         $data->conferencestatus = null;
         $data->syncattempts = 0;
         $data->timelastattempt = null;
+        $data->recordingowneruserid = null;
+        $data->recordingoauthissuerid = null;
+        $data->recordingsyncstatus = \mod_googlemeet\local\recording_sync_state::DISCONNECTED;
+        $data->recordingsyncattempts = 0;
+        $data->recordinglasterrorcode = null;
+        $data->recordinglasterrormessage = null;
+        $data->recordingtimelastattempt = null;
+        $data->lastsync = null;
+        $data->creatoremail = null;
 
         if ($mode === \mod_googlemeet\local\integration_mode::MANAGED) {
             $data->integrationmode = \mod_googlemeet\local\integration_mode::MANAGED;
@@ -146,25 +152,6 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
 
         $newitemid = $DB->insert_record('googlemeet_events', $data);
         $this->set_mapping('googlemeet_event', $oldid, $newitemid);
-    }
-
-    /**
-     * Process a recording restore.
-     *
-     * @param object $data The data in object form
-     * @return void
-     */
-    protected function process_googlemeet_recording($data) {
-        global $DB;
-
-        $data = (object)$data;
-        $oldid = $data->id;
-
-        $data->googlemeetid = $this->get_new_parentid('googlemeet');
-        $data->timemodified = $this->apply_date_offset($data->timemodified);
-
-        $newitemid = $DB->insert_record('googlemeet_recordings', $data);
-        $this->set_mapping('googlemeet_recording', $oldid, $newitemid);
     }
 
     /**

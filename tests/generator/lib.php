@@ -83,6 +83,8 @@ class mod_googlemeet_generator extends testing_module_generator {
             'syncstatus' => \mod_googlemeet\local\sync_state::READY,
             'syncattempts' => 0,
             'timecreated' => $now,
+            'recordingsyncstatus' => \mod_googlemeet\local\recording_sync_state::DISCONNECTED,
+            'recordingsyncattempts' => 0,
         ];
 
         $record = (object) $record;

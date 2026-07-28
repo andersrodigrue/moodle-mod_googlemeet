@@ -61,6 +61,7 @@ $capabilities = [
 
     'mod/googlemeet:syncgoogledrive' => [
         'captype' => 'write',
+        'riskbitmask' => RISK_PERSONAL,
         'contextlevel' => CONTEXT_MODULE,
         'archetypes' => [
             'editingteacher' => CAP_ALLOW,

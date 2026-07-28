@@ -14,19 +14,22 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace mod_googlemeet\api;
+
 /**
- * Plugin version and other meta-data are defined here.
+ * Authenticated HTTP boundary used by the Google Meet recording client.
  *
  * @package     mod_googlemeet
- * @copyright   2020 Rone Santos <ronefel@hotmail.com>
+ * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+interface recording_http_client {
 
-defined('MOODLE_INTERNAL') || die();
-
-$plugin->component = 'mod_googlemeet';
-$plugin->release = '3.0.0-dev';
-$plugin->version = 2026072608;
-$plugin->requires = 2026042000; // Moodle 5.2.
-$plugin->supported = [502, 502];
-$plugin->maturity = MATURITY_ALPHA;
+    /**
+     * Sends an authenticated GET request.
+     *
+     * @param string $url Absolute Google Meet API URL.
+     * @return array{status: int, body: string}
+     */
+    public function get(string $url): array;
+}

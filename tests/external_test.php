@@ -29,7 +29,6 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
  */
 #[CoversMethod(\mod_googlemeet_external::class, 'recording_edit_name')]
 #[CoversMethod(\mod_googlemeet_external::class, 'showhide_recording')]
-#[CoversMethod(\mod_googlemeet_external::class, 'sync_recordings')]
 #[CoversMethod(\mod_googlemeet_external::class, 'delete_all_recordings')]
 #[RunTestsInSeparateProcesses]
 final class external_test extends \advanced_testcase {
@@ -107,29 +106,6 @@ final class external_test extends \advanced_testcase {
 
         $visible = $DB->get_field('googlemeet_recordings', 'visible', ['id' => $fixture['recordingb']->id], MUST_EXIST);
         $this->assertEquals(1, $visible);
-    }
-
-    /**
-     * Recording synchronization cannot target another activity.
-     */
-    public function test_sync_recordings_rejects_another_activity(): void {
-        global $DB;
-
-        $fixture = $this->create_security_fixture();
-
-        $this->assert_cross_activity_call_rejected(
-            function() use ($fixture) {
-                \mod_googlemeet_external::sync_recordings(
-                    $fixture['meetingb']->id,
-                    'teacher@example.com',
-                    [],
-                    $fixture['meetinga']->cmid
-                );
-            },
-            \invalid_parameter_exception::class
-        );
-
-        $this->assertTrue($DB->record_exists('googlemeet_recordings', ['id' => $fixture['recordingb']->id]));
     }
 
     /**
