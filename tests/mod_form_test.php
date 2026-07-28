@@ -54,6 +54,15 @@ final class testable_mod_form extends \mod_googlemeet_mod_form {
     public function quickform(): \MoodleQuickForm {
         return $this->_form;
     }
+
+    /**
+     * Keeps these focused tests independent of course-format form controls.
+     *
+     * @return bool
+     */
+    protected function standard_coursemodule_elements() {
+        return true;
+    }
 }
 
 /**
@@ -115,15 +124,17 @@ final class mod_form_test extends \advanced_testcase {
      * Imported exception schedules are visible but cannot be simplified.
      */
     public function test_imported_exception_schedule_is_frozen(): void {
-        global $COURSE, $DB;
+        global $COURSE;
 
         $this->resetAfterTest();
         $this->setAdminUser();
         set_config('issuerid', 0, 'googlemeet');
         $COURSE = $this->getDataGenerator()->create_course();
         $start = $COURSE->startdate + DAYSECS;
-        $activity = $this->getDataGenerator()->get_plugin_generator('mod_googlemeet')->create_instance([
-            'course' => $COURSE->id,
+        $current = (object) [
+            'instance' => 42,
+            'integrationmode' => \mod_googlemeet\local\integration_mode::MANUAL,
+            'url' => 'https://meet.google.com/abc-defg-hij',
             'timestart' => $start,
             'timeend' => $start + HOURSECS,
             'timezone' => 'America/Sao_Paulo',
@@ -131,12 +142,9 @@ final class mod_form_test extends \advanced_testcase {
                 'Ymd\THis\Z',
                 $start + WEEKSECS
             ),
-        ]);
-        $current = $DB->get_record('googlemeet', ['id' => $activity->id], '*', MUST_EXIST);
-        $current->instance = $current->id;
-        $cm = get_coursemodule_from_instance('googlemeet', $current->id, $COURSE->id, false, MUST_EXIST);
+        ];
 
-        $form = new testable_mod_form($current, 0, $cm, $COURSE);
+        $form = new testable_mod_form($current, 0, null, $COURSE);
         $mform = $form->quickform();
 
         $this->assertTrue($mform->elementExists('recurrencecompatibilitynotice'));
