@@ -95,14 +95,21 @@ final class meeting_form_data {
             $normalized->recurrence = (string) $existing->recurrence;
         } else {
             $timezone = $this->timezone((string) ($data->timezone ?? $defaulttimezone));
-            $normalized->timestart = (int) ($data->timestart ?? 0);
-            $normalized->timeend = (int) ($data->timeend ?? 0);
+            $normalized->timestart = $this->preserve_existing_seconds(
+                (int) ($data->timestart ?? 0),
+                (int) ($existing->timestart ?? 0)
+            );
+            $normalized->timeend = $this->preserve_existing_seconds(
+                (int) ($data->timeend ?? 0),
+                (int) ($existing->timeend ?? 0)
+            );
             $normalized->timezone = $timezone->getName();
             $this->validate_duration($normalized->timestart, $normalized->timeend);
             $normalized->recurrence = $this->recurrence_from_controls(
                 $data,
                 $normalized->timestart,
-                $timezone
+                $timezone,
+                $existing
             );
         }
 
@@ -263,12 +270,14 @@ final class meeting_form_data {
      * @param \stdClass $data Submitted form data.
      * @param int $timestart Canonical meeting start.
      * @param \DateTimeZone $timezone Meeting timezone.
+     * @param \stdClass|null $existing Existing activity during update.
      * @return string|null
      */
     private function recurrence_from_controls(
         \stdClass $data,
         int $timestart,
-        \DateTimeZone $timezone
+        \DateTimeZone $timezone,
+        ?\stdClass $existing = null
     ): ?string {
         if (empty($data->recurrenceenabled)) {
             return null;
@@ -285,6 +294,12 @@ final class meeting_form_data {
         }
 
         $until = (int) ($data->recurrenceuntil ?? 0);
+        if ($existing !== null) {
+            $parsed = $this->parse_editable_recurrence((string) ($existing->recurrence ?? ''));
+            if ($parsed !== null) {
+                $until = $this->preserve_existing_seconds($until, $parsed['until']);
+            }
+        }
         $this->validate_recurrence_until($timestart, $until, $timezone);
 
         return 'RRULE:FREQ=WEEKLY;INTERVAL=' . $interval
@@ -432,6 +447,28 @@ final class meeting_form_data {
         if ($timeend <= $timestart) {
             throw new \invalid_parameter_exception('The meeting end time must be after its start time.');
         }
+    }
+
+    /**
+     * Keeps sub-minute precision when a form edit did not change the minute.
+     *
+     * Moodle date/time selectors do not expose seconds. Imported schedules may
+     * contain them, so an unrelated form edit must not silently truncate them.
+     *
+     * @param int $submitted Submitted minute-precision timestamp.
+     * @param int $existing Existing canonical timestamp.
+     * @return int
+     */
+    private function preserve_existing_seconds(int $submitted, int $existing): int {
+        if (
+            $submitted > 0
+            && $existing > 0
+            && intdiv($submitted, MINSECS) === intdiv($existing, MINSECS)
+        ) {
+            return $existing;
+        }
+
+        return $submitted;
     }
 
     /**

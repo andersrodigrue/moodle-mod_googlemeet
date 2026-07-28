@@ -136,12 +136,12 @@ class mod_googlemeet_mod_form extends moodleform_mod {
         $scheduletimezone = $this->schedule_timezone();
         $dateoptions = [
             'optional' => false,
-            'step' => 5,
+            'step' => 1,
             'timezone' => $scheduletimezone,
         ];
         $now = \core\di::get(\core\clock::class)->time();
         $defaultstart = max((int) $COURSE->startdate, $now);
-        $defaultstart = (int) (ceil($defaultstart / (5 * MINSECS)) * (5 * MINSECS));
+        $defaultstart = (int) (ceil($defaultstart / MINSECS) * MINSECS);
 
         $mform->addElement(
             'date_time_selector',

@@ -182,6 +182,38 @@ final class meeting_form_data_test extends \advanced_testcase {
     }
 
     /**
+     * Minute-precision controls preserve imported seconds on unchanged values.
+     */
+    public function test_preserves_existing_sub_minute_precision(): void {
+        $minute = make_timestamp(2026, 8, 3, 10, 15, 0, 'America/Sao_Paulo');
+        $untilminute = make_timestamp(2026, 8, 31, 10, 15, 0, 'America/Sao_Paulo');
+        $existing = (object) [
+            'timestart' => $minute + 27,
+            'timeend' => $minute + HOURSECS + 42,
+            'timezone' => 'America/Sao_Paulo',
+            'recurrence' => 'RRULE:FREQ=WEEKLY;INTERVAL=1;UNTIL='
+                . gmdate('Ymd\THis\Z', $untilminute + 59)
+                . ';BYDAY=MO;WKST=MO',
+        ];
+        $submitted = (object) [
+            'name' => 'Updated title',
+            'timestart' => $minute,
+            'timeend' => $minute + HOURSECS,
+            'timezone' => 'America/Sao_Paulo',
+            'recurrenceenabled' => 1,
+            'recurrenceinterval' => 1,
+            'recurrenceweekdays' => ['MO'],
+            'recurrenceuntil' => $untilminute,
+        ];
+
+        $result = (new meeting_form_data())->normalize($submitted, 'UTC', $existing);
+
+        $this->assertSame($existing->timestart, $result->timestart);
+        $this->assertSame($existing->timeend, $result->timeend);
+        $this->assertSame($existing->recurrence, $result->recurrence);
+    }
+
+    /**
      * Legacy-only records acquire defaults without exposing legacy controls.
      */
     public function test_prepares_legacy_record_for_canonical_form(): void {
