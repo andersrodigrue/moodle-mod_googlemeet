@@ -223,6 +223,10 @@ final class upgrade_test extends \advanced_testcase {
             }
         }
 
+        $eventcolumns = $DB->get_columns('googlemeet_events');
+        $this->assertNotEmpty($eventcolumns['occurrencekey']->not_null);
+        $this->assertEmpty($eventcolumns['occurrencekey']->has_default);
+
         $activitycolumns = $DB->get_columns('googlemeet');
         foreach (compatibility_contract::retained_activity_fields() as $field => $policy) {
             $this->assertArrayHasKey($field, $activitycolumns);

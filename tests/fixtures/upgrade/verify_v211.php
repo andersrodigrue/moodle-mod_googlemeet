@@ -257,6 +257,10 @@ sort($expectedtables);
 sort($actualtables);
 $expect($expectedtables === $actualtables, 'the upgraded and fresh-install table sets differ.');
 
+$eventcolumns = $DB->get_columns('googlemeet_events');
+$expect(!empty($eventcolumns['occurrencekey']->not_null), 'occurrencekey is not required.');
+$expect(empty($eventcolumns['occurrencekey']->has_default), 'occurrencekey retained a temporary default.');
+
 foreach (\mod_googlemeet\local\upgrade\compatibility_contract::retained_activity_fields() as $field => $policy) {
     $expect(
         $dbman->field_exists($activitytable, new xmldb_field($field)),

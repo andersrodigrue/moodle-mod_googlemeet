@@ -284,9 +284,9 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
             XMLDB_TYPE_CHAR,
             '64',
             null,
-            XMLDB_NOTNULL,
             null,
-            '',
+            null,
+            null,
             'googlemeetid'
         );
         if (!$dbman->field_exists($eventtable, $occurrencekeyfield)) {
@@ -448,12 +448,39 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
         }
         $receipts->close();
 
+        $activityoccurrenceindex = new xmldb_index(
+            'activityoccurrence',
+            XMLDB_INDEX_UNIQUE,
+            ['googlemeetid', 'occurrencekey']
+        );
+
+        // A failed pre-release attempt may already have created the index while
+        // the field still had its temporary default. Drop that dependency before
+        // finalising the field, then recreate the index below.
+        if ($dbman->index_exists($eventtable, $activityoccurrenceindex)) {
+            $dbman->drop_index($eventtable, $activityoccurrenceindex);
+        }
+        $finaloccurrencekeyfield = new xmldb_field(
+            'occurrencekey',
+            XMLDB_TYPE_CHAR,
+            '64',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            null,
+            'googlemeetid'
+        );
+        $eventcolumns = $DB->get_columns('googlemeet_events');
+        if (!empty($eventcolumns['occurrencekey']->has_default)) {
+            $dbman->change_field_default($eventtable, $finaloccurrencekeyfield);
+            $eventcolumns = $DB->get_columns('googlemeet_events');
+        }
+        if (empty($eventcolumns['occurrencekey']->not_null)) {
+            $dbman->change_field_notnull($eventtable, $finaloccurrencekeyfield);
+        }
+
         $eventindexes = [
-            new xmldb_index(
-                'activityoccurrence',
-                XMLDB_INDEX_UNIQUE,
-                ['googlemeetid', 'occurrencekey']
-            ),
+            $activityoccurrenceindex,
             new xmldb_index('calendareventid', XMLDB_INDEX_NOTUNIQUE, ['calendareventid']),
             new xmldb_index('eventdate', XMLDB_INDEX_NOTUNIQUE, ['eventdate']),
         ];
@@ -472,22 +499,6 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
             if (!$dbman->index_exists($receipttable, $index)) {
                 $dbman->add_index($receipttable, $index);
             }
-        }
-
-        // The final schema requires a non-empty stable key.
-        $finaloccurrencekeyfield = new xmldb_field(
-            'occurrencekey',
-            XMLDB_TYPE_CHAR,
-            '64',
-            null,
-            XMLDB_NOTNULL,
-            null,
-            null,
-            'googlemeetid'
-        );
-        $eventcolumns = $DB->get_columns('googlemeet_events');
-        if (!empty($eventcolumns['occurrencekey']->has_default)) {
-            $dbman->change_field_default($eventtable, $finaloccurrencekeyfield);
         }
 
         upgrade_mod_savepoint(true, 2026072610, 'googlemeet');
