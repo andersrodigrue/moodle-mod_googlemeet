@@ -831,6 +831,40 @@ run. It converts the previously external readiness assumptions into a failing
 gate that can be satisfied only by the two dedicated environments. No database
 schema is changed; savepoint `2026072622` records the operational contract.
 
+## Durable remote cancellation after local deletion
+
+Deleting a managed Google Meet activity now captures its Google Calendar event
+identity in `googlemeet_remote_cleanup` before any activity-owned row is removed.
+The capture, owner-scoped ad hoc task and local deletion share one delegated
+database transaction. A failure to preserve the remote obligation therefore
+rolls back the Moodle deletion instead of orphaning the Google event.
+Deletion also acquires the activity synchronization lock, preventing a worker
+from creating or updating the event while its local source is being removed.
+When a Calendar insert succeeded but its response was lost, the outbox derives
+the same controlled event ID used by the adapter and safely deletes it (or
+accepts the provider's idempotent not-found response).
+
+The cleanup row intentionally has no foreign key to the activity, course or
+user. It retains only the original OAuth owner and issuer, Calendar/event IDs,
+last managed guest count and bounded lifecycle diagnostics. The same module
+deletion callback is used when a whole course is deleted, so both paths receive
+the durable behavior without a separate course observer.
+
+`cancel_deleted_meeting` reconstructs the minimum activity-shaped request under
+the original owner's task identity. Calendar DELETE remains idempotent because
+the transport treats Google responses 404 and 410 as success. A successful
+request removes the tombstone. Transport ambiguity remains in `processing` so
+Moodle retries it; authorization, provider and configuration failures remain in
+`blocked` with a daily recovery time. The hourly
+`reconcile_remote_cleanups` task only restores owner-scoped ad hoc work for
+pending, retry-due or abandoned records and never accesses OAuth as the cron
+user.
+
+Because the original module context no longer exists, the privacy provider
+maps retained cleanup ownership to the system context for discovery, export and
+approved erasure. Savepoint `2026072623` installs the durable cleanup table and
+records this lifecycle contract.
+
 ## Next structural slice
 
 The next slice now has an explicit external entry condition: provision the

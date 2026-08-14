@@ -34,8 +34,10 @@ use mod_googlemeet\local\calendar_catalog;
 use mod_googlemeet\local\calendar_guest_policy;
 use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\meeting_form_data;
+use mod_googlemeet\local\meeting_lock;
 use mod_googlemeet\local\meeting_manager;
 use mod_googlemeet\local\oauth_manager;
+use mod_googlemeet\local\remote_cleanup_manager;
 use mod_googlemeet\local\schedule_manager;
 use mod_googlemeet\local\sync_state;
 
@@ -330,20 +332,30 @@ function googlemeet_delete_instance($id) {
     global $DB, $CFG;
     require_once($CFG->dirroot . '/mod/googlemeet/locallib.php');
 
-    $exists = $DB->get_record('googlemeet', array('id' => $id));
-    if (!$exists) {
+    $id = (int) $id;
+    if ($id <= 0) {
         return false;
     }
 
-    (new schedule_manager())->delete((int) $id);
+    return (new meeting_lock())->with_lock($id, function () use ($DB, $id): bool {
+        $exists = $DB->get_record('googlemeet', ['id' => $id]);
+        if (!$exists) {
+            return false;
+        }
 
-    $DB->delete_records('googlemeet_diagnostics', ['googlemeetid' => $id]);
-    $DB->delete_records('googlemeet_calendar_guests', ['googlemeetid' => $id]);
-    $DB->delete_records('googlemeet_recordings', ['googlemeetid' => $id]);
+        $transaction = $DB->start_delegated_transaction();
+        (new remote_cleanup_manager())->capture_and_queue($exists);
+        (new schedule_manager())->delete($id);
 
-    $DB->delete_records('googlemeet', array('id' => $id));
+        $DB->delete_records('googlemeet_diagnostics', ['googlemeetid' => $id]);
+        $DB->delete_records('googlemeet_calendar_guests', ['googlemeetid' => $id]);
+        $DB->delete_records('googlemeet_recordings', ['googlemeetid' => $id]);
 
-    return true;
+        $DB->delete_records('googlemeet', ['id' => $id]);
+        $transaction->allow_commit();
+
+        return true;
+    });
 }
 
 /**

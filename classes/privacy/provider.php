@@ -34,6 +34,7 @@ use core_privacy\local\request\transform;
 use core_privacy\local\request\userlist;
 use core_privacy\local\request\writer;
 use mod_googlemeet\local\privacy_lifecycle;
+use mod_googlemeet\local\remote_cleanup_repository;
 
 /**
  * Declares, exports and deletes personal data stored by mod_googlemeet.
@@ -121,6 +122,24 @@ class provider implements
             ],
             'privacy:metadata:googlemeet_notify_done'
         );
+        $collection->add_database_table(
+            'googlemeet_remote_cleanup',
+            [
+                'cleanupkey' => 'privacy:metadata:googlemeet_remote_cleanup:cleanupkey',
+                'owneruserid' => 'privacy:metadata:googlemeet_remote_cleanup:owneruserid',
+                'oauthissuerid' => 'privacy:metadata:googlemeet_remote_cleanup:oauthissuerid',
+                'calendarid' => 'privacy:metadata:googlemeet_remote_cleanup:calendarid',
+                'googleeventid' => 'privacy:metadata:googlemeet_remote_cleanup:googleeventid',
+                'guestcount' => 'privacy:metadata:googlemeet_remote_cleanup:guestcount',
+                'status' => 'privacy:metadata:googlemeet_remote_cleanup:status',
+                'attempts' => 'privacy:metadata:googlemeet_remote_cleanup:attempts',
+                'lasterrorcode' => 'privacy:metadata:googlemeet_remote_cleanup:lasterrorcode',
+                'timecreated' => 'privacy:metadata:googlemeet_remote_cleanup:timecreated',
+                'timelastattempt' => 'privacy:metadata:googlemeet_remote_cleanup:timelastattempt',
+                'timenextattempt' => 'privacy:metadata:googlemeet_remote_cleanup:timenextattempt',
+            ],
+            'privacy:metadata:googlemeet_remote_cleanup'
+        );
         $collection->add_external_location_link(
             'google_calendar',
             [
@@ -204,6 +223,9 @@ class provider implements
 
         $contextlist = new contextlist();
         $contextlist->add_from_sql($sql, $params);
+        if ($DB->record_exists('googlemeet_remote_cleanup', ['owneruserid' => $userid])) {
+            $contextlist->add_system_context();
+        }
         return $contextlist;
     }
 
@@ -216,6 +238,15 @@ class provider implements
         global $DB;
 
         $context = $userlist->get_context();
+        if ($context instanceof \context_system) {
+            $userlist->add_from_sql(
+                'userid',
+                'SELECT DISTINCT owneruserid AS userid
+                   FROM {googlemeet_remote_cleanup}
+                  WHERE owneruserid IS NOT NULL'
+            );
+            return;
+        }
         if (!$context instanceof \context_module) {
             return;
         }
@@ -302,6 +333,10 @@ class provider implements
 
         $user = $contextlist->get_user();
         foreach ($contextlist->get_contexts() as $context) {
+            if ($context instanceof \context_system) {
+                self::export_remote_cleanups($context, (int) $user->id);
+                continue;
+            }
             $googlemeetid = self::googlemeetid_from_context($context);
             if ($googlemeetid === null) {
                 continue;
@@ -416,6 +451,10 @@ class provider implements
      * @param \context $context Context to erase.
      */
     public static function delete_data_for_all_users_in_context(\context $context): void {
+        if ($context instanceof \context_system) {
+            (new remote_cleanup_repository())->delete_all_user_data();
+            return;
+        }
         $googlemeetid = self::googlemeetid_from_context($context);
         if ($googlemeetid !== null) {
             (new privacy_lifecycle())->delete_all_user_data($googlemeetid);
@@ -434,6 +473,10 @@ class provider implements
 
         $user = $contextlist->get_user();
         foreach ($contextlist->get_contexts() as $context) {
+            if ($context instanceof \context_system) {
+                (new remote_cleanup_repository())->delete_user_data((int) $user->id);
+                continue;
+            }
             $googlemeetid = self::googlemeetid_from_context($context);
             if ($googlemeetid !== null) {
                 (new privacy_lifecycle())->delete_user_data(
@@ -453,15 +496,57 @@ class provider implements
     public static function delete_data_for_users(approved_userlist $userlist): void {
         global $DB;
 
-        $googlemeetid = self::googlemeetid_from_context($userlist->get_context());
         $userids = $userlist->get_userids();
-        if ($googlemeetid === null || !$userids) {
+        if (!$userids) {
+            return;
+        }
+        if ($userlist->get_context() instanceof \context_system) {
+            $repository = new remote_cleanup_repository();
+            foreach ($userids as $userid) {
+                $repository->delete_user_data((int) $userid);
+            }
+            return;
+        }
+
+        $googlemeetid = self::googlemeetid_from_context($userlist->get_context());
+        if ($googlemeetid === null) {
             return;
         }
 
         $users = $DB->get_records_list('user', 'id', $userids, '', 'id, email');
         $emails = array_map(static fn(\stdClass $user): string => (string) $user->email, $users);
         (new privacy_lifecycle())->delete_users_data($googlemeetid, $userids, $emails);
+    }
+
+    /**
+     * Exports cancellation obligations whose original module context no longer exists.
+     *
+     * @param \context_system $context System context.
+     * @param int $userid Owner user ID.
+     */
+    private static function export_remote_cleanups(\context_system $context, int $userid): void {
+        global $DB;
+
+        $records = array_values($DB->get_records(
+            'googlemeet_remote_cleanup',
+            ['owneruserid' => $userid],
+            'timecreated ASC, id ASC',
+            'cleanupkey, owneruserid, oauthissuerid, calendarid, googleeventid, guestcount, status, attempts, '
+                . 'lasterrorcode, timecreated, timelastattempt, timenextattempt'
+        ));
+        if (!$records) {
+            return;
+        }
+        foreach ($records as $record) {
+            $record->timecreated = transform::datetime((int) $record->timecreated);
+            $record->timelastattempt = self::export_datetime($record->timelastattempt);
+            $record->timenextattempt = self::export_datetime($record->timenextattempt);
+        }
+
+        writer::with_context($context)->export_data(
+            [get_string('privacy:path:remotecleanups', 'mod_googlemeet')],
+            (object) ['cleanups' => $records]
+        );
     }
 
     /**

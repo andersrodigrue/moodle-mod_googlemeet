@@ -41,6 +41,7 @@ Installations with an older version number also retain the guarded
 | `2026072620` | Add the protected Google Workspace acceptance contract. | No schema mutation; tests bind the closed scenarios and sanitized evidence to the current version. |
 | `2026072621` | Add complete acceptance-campaign accounting. | No schema mutation; evidence binds each runbook case to the exact Moodle/PHP runtime and the offline gate requires both supported PHP series. |
 | `2026072622` | Add protected dual-environment readiness. | No schema mutation; read-only checks prove runtime/site isolation, mail suppression, exact source installation, OAuth issuers and dedicated fixtures before provider access. |
+| `2026072623` | Preserve remote Calendar cancellation across activity and course deletion. | Adds a durable cleanup outbox, owner-scoped ad hoc cancellation and hourly recovery of pending, blocked or abandoned work. |
 
 The automated upgrade suite calls the real `xmldb_googlemeet_upgrade()` function.
 It starts once from `2023050101`, once from immediately before `2023042200`, and

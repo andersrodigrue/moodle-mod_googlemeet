@@ -697,5 +697,33 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
         upgrade_mod_savepoint(true, 2026072622, 'googlemeet');
     }
 
+    if ($oldversion < 2026072623) {
+        $table = new xmldb_table('googlemeet_remote_cleanup');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('cleanupkey', XMLDB_TYPE_CHAR, '64', null, XMLDB_NOTNULL);
+        $table->add_field('owneruserid', XMLDB_TYPE_INTEGER, '10');
+        $table->add_field('oauthissuerid', XMLDB_TYPE_INTEGER, '10');
+        $table->add_field('calendarid', XMLDB_TYPE_CHAR, '255');
+        $table->add_field('googleeventid', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL);
+        $table->add_field('guestcount', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('status', XMLDB_TYPE_CHAR, '16', null, XMLDB_NOTNULL, null, 'pending');
+        $table->add_field('attempts', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('lasterrorcode', XMLDB_TYPE_CHAR, '100');
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timelastattempt', XMLDB_TYPE_INTEGER, '10');
+        $table->add_field('timenextattempt', XMLDB_TYPE_INTEGER, '10');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('cleanupkey', XMLDB_INDEX_UNIQUE, ['cleanupkey']);
+        $table->add_index('ownerstatus', XMLDB_INDEX_NOTUNIQUE, ['owneruserid', 'status']);
+        $table->add_index('due', XMLDB_INDEX_NOTUNIQUE, ['status', 'timenextattempt']);
+        $table->add_index('timecreated', XMLDB_INDEX_NOTUNIQUE, ['timecreated']);
+
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_mod_savepoint(true, 2026072623, 'googlemeet');
+    }
+
     return true;
 }

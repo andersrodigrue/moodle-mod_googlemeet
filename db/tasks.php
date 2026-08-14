@@ -53,6 +53,15 @@ $tasks = [
         'month' => '*',
     ],
     [
+        'classname' => 'mod_googlemeet\task\reconcile_remote_cleanups',
+        'blocking' => 0,
+        'minute' => '23',
+        'hour' => '*',
+        'day' => '*',
+        'dayofweek' => '*',
+        'month' => '*',
+    ],
+    [
         'classname' => 'mod_googlemeet\task\purge_diagnostics',
         'blocking' => 0,
         'minute' => '41',

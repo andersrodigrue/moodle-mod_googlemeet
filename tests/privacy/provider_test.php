@@ -23,6 +23,7 @@ use core_privacy\local\request\userlist;
 use core_privacy\local\request\writer;
 use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\recording_sync_state;
+use mod_googlemeet\local\remote_cleanup_repository;
 use mod_googlemeet\local\sync_state;
 use PHPUnit\Framework\Attributes\CoversClass;
 
@@ -149,11 +150,12 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $items = provider::get_metadata(new collection('mod_googlemeet'))->get_collection();
         $names = array_map(static fn($item): string => $item->get_name(), $items);
 
-        $this->assertCount(9, $names);
+        $this->assertCount(10, $names);
         $this->assertContains('googlemeet', $names);
         $this->assertContains('googlemeet_calendar_guests', $names);
         $this->assertContains('googlemeet_recordings', $names);
         $this->assertContains('googlemeet_notify_done', $names);
+        $this->assertContains('googlemeet_remote_cleanup', $names);
         $this->assertContains('google_calendar', $names);
         $this->assertContains('google_meet', $names);
         $this->assertContains('core_oauth2', $names);
@@ -219,6 +221,51 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             $this->export_context_data_for_user((int) $user->id, $this->context, 'mod_googlemeet');
             $this->assertTrue(writer::with_context($this->context)->has_any_data());
         }
+    }
+
+    /**
+     * Deleted-activity cleanup data remains discoverable and erasable in system context.
+     */
+    public function test_remote_cleanup_uses_system_privacy_context(): void {
+        global $DB;
+
+        $cleanup = (new remote_cleanup_repository())->capture($this->meeting);
+        $systemcontext = \context_system::instance();
+
+        $contextlist = provider::get_contexts_for_userid((int) $this->calendarowner->id);
+        $contextids = array_map(
+            static fn(\context $context): int => (int) $context->id,
+            iterator_to_array($contextlist)
+        );
+        $this->assertEqualsCanonicalizing(
+            [(int) $this->context->id, (int) $systemcontext->id],
+            $contextids
+        );
+
+        $userlist = new userlist($systemcontext, 'mod_googlemeet');
+        provider::get_users_in_context($userlist);
+        $this->assertSame([(int) $this->calendarowner->id], $userlist->get_userids());
+
+        writer::reset();
+        $this->export_context_data_for_user(
+            (int) $this->calendarowner->id,
+            $systemcontext,
+            'mod_googlemeet'
+        );
+        $data = writer::with_context($systemcontext)->get_data([
+            get_string('privacy:path:remotecleanups', 'mod_googlemeet'),
+        ]);
+        $this->assertCount(1, $data->cleanups);
+        $this->assertSame('event-123', $data->cleanups[0]->googleeventid);
+        $this->assertSame((int) $this->calendarowner->id, (int) $data->cleanups[0]->owneruserid);
+        $this->assertSame(64, strlen($data->cleanups[0]->cleanupkey));
+
+        provider::delete_data_for_user(new approved_contextlist(
+            $this->calendarowner,
+            'mod_googlemeet',
+            [$systemcontext->id]
+        ));
+        $this->assertFalse($DB->record_exists('googlemeet_remote_cleanup', ['id' => $cleanup->id]));
     }
 
     /**
