@@ -115,6 +115,26 @@
         <INDEX NAME="userid" UNIQUE="false" FIELDS="userid"/>
       </INDEXES>
     </TABLE>
+    <TABLE NAME="googlemeet_diagnostics" COMMENT="Stores bounded privacy-safe operational transitions for administrators.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="googlemeetid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="operation" TYPE="char" LENGTH="32" NOTNULL="true" SEQUENCE="false" COMMENT="Closed operation identifier."/>
+        <FIELD NAME="outcome" TYPE="char" LENGTH="16" NOTNULL="true" SEQUENCE="false" COMMENT="Closed operation outcome."/>
+        <FIELD NAME="source" TYPE="char" LENGTH="16" NOTNULL="true" SEQUENCE="false" COMMENT="Closed execution source."/>
+        <FIELD NAME="diagnosticcode" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Stable sanitized code without a free-form message."/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of the operational transition."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="googlemeetidfk" TYPE="foreign" FIELDS="googlemeetid" REFTABLE="googlemeet" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="activitytime" UNIQUE="false" FIELDS="googlemeetid, timecreated"/>
+        <INDEX NAME="operationoutcome" UNIQUE="false" FIELDS="operation, outcome"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+      </INDEXES>
+    </TABLE>
     <TABLE NAME="googlemeet_recordings" COMMENT="Stores references from Google Meet recordings.">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>

@@ -89,6 +89,43 @@ final class google_calendar_client_test extends \advanced_testcase {
     }
 
     /**
+     * Calendar discovery uses the least-privilege writer filter and bounded page size.
+     */
+    public function test_lists_writable_calendars_with_opaque_pagination(): void {
+        $http = new google_calendar_http_client();
+        $http->responses[] = [
+            'status' => 200,
+            'body' => '{"items":[],"nextSyncToken":"sync-token"}',
+        ];
+
+        $result = (new google_calendar_client($http))->list_writable_calendars('next page/+');
+
+        $this->assertSame([], $result['items']);
+        $this->assertSame('GET', $http->requests[0]['method']);
+        $this->assertSame(
+            'https://www.googleapis.com/calendar/v3/users/me/calendarList'
+                . '?maxResults=250&minAccessRole=writer&showDeleted=false&showHidden=true'
+                . '&pageToken=next%20page%2F%2B',
+            $http->requests[0]['url']
+        );
+        $this->assertNull($http->requests[0]['body']);
+    }
+
+    /**
+     * A malformed pagination token never reaches the authenticated transport.
+     */
+    public function test_rejects_invalid_calendar_list_page_token(): void {
+        $http = new google_calendar_http_client();
+
+        $this->expectException(calendar_configuration_exception::class);
+        try {
+            (new google_calendar_client($http))->list_writable_calendars("unsafe\nvalue");
+        } finally {
+            $this->assertSame([], $http->requests);
+        }
+    }
+
+    /**
      * Patch and get use the encoded controlled event path.
      */
     public function test_patch_and_get_use_event_resource_url(): void {

@@ -98,61 +98,34 @@
     max-width: 900px;
 }
 
-#googlemeet_recordings_table {
+.googlemeet-recordings-table {
     position: relative;
     max-width: 900px;
-    overflow: auto;
 }
 
-#googlemeet_recordings_table table {
+.googlemeet-recordings-table table {
     min-width: 500px;
 }
 
-#googlemeet_recordings_table table td {
+.googlemeet-recordings-table table td {
     vertical-align: middle;
 }
 
-#googlemeet_recordings_table table tr.warning {
+.googlemeet-recordings-table table tr.googlemeet-recording-hidden {
     color: #aaa;
     font-weight: normal;
 }
 
-#googlemeet_recordings_table .icon {
+.googlemeet-recordings-table .icon {
     padding: 0;
 }
 
-#googlemeet_recordings_table .btn .icon {
+.googlemeet-recordings-table .btn .icon {
     margin-left: .5rem;
 }
 
-#googlemeet_syncimg {
-    position: absolute;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    align-items: center;
-    place-content: center;
-    background-color: #fff;
-    opacity: .6;
-    display: none;
-}
-
-#googlemeet_syncimg .icon {
-    height: 64px;
-    width: 64px;
-}
-
-#googlemeet_recordings #recordings {
-    display: flex;
-    justify-content: space-between;
-}
-
-#googlemeet_recordings #syncbutton {
-    max-width: 600px;
-    padding: 10px;
-    background: #f5f5f5;
-    border-radius: 4px;
-    border: 1px solid #e3e3e3;
+.googlemeet-recordings-table [data-region="name-form"] {
+    min-width: 18rem;
 }
 
 .path-mod-googlemeet .items-center,
@@ -163,41 +136,38 @@
     align-items: center;
 }
 
-#googlemeet_recordings_table .dt-container {
+.googlemeet-recordings-table .dt-container {
     overflow-x: auto;
     margin: 10px 0;
 }
 
-#googlemeet_recordings_table .dt-bottom {
+.googlemeet-recordings-table .dt-bottom {
     margin-bottom: 10px;
 }
 
-#googlemeet_recordings_table .dt-top,
-#googlemeet_recordings_table .dt-bottom {
+.googlemeet-recordings-table .dt-top,
+.googlemeet-recordings-table .dt-bottom {
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-#googlemeet_recordings_table .dt-search {
+.googlemeet-recordings-table .dt-search {
     flex: 1;
     justify-content: flex-end;
     display: flex;
 }
 
-#googlemeet_recordings_table .dt-top .dt-selector,
-#googlemeet_recordings_table .dt-bottom .dt-selector,
-#googlemeet_recordings_table .dt-top .dt-input,
-#googlemeet_recordings_table .dt-bottom .dt-input,
-#googlemeet_recordings_table .dt-top label,
-#googlemeet_recordings_table .dt-bottom label {
+.googlemeet-recordings-table .dt-top .dt-selector,
+.googlemeet-recordings-table .dt-bottom .dt-selector,
+.googlemeet-recordings-table .dt-top .dt-input,
+.googlemeet-recordings-table .dt-bottom .dt-input,
+.googlemeet-recordings-table .dt-top label,
+.googlemeet-recordings-table .dt-bottom label {
     margin-bottom: 0;
 }
 
 @media only screen and (max-width: 950px) {
-    #googlemeet_recordings #recordings {
-        display: block;
-    }
     #googlemeet_auth-info {
         justify-content: start;
     }

@@ -102,6 +102,7 @@ final class mod_form_test extends \advanced_testcase {
             'recurrenceweekdays',
             'recurrenceinterval',
             'recurrenceuntil',
+            'calendarid',
             'guestpolicy',
             'guestpolicywarning',
         ] as $field) {
@@ -120,6 +121,71 @@ final class mod_form_test extends \advanced_testcase {
         ] as $field) {
             $this->assertFalse($mform->elementExists($field), $field);
         }
+    }
+
+    /**
+     * An existing managed event exposes its stored Calendar as read-only.
+     */
+    public function test_existing_managed_calendar_is_frozen(): void {
+        global $COURSE;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        set_config('issuerid', 0, 'googlemeet');
+        $COURSE = $this->getDataGenerator()->create_course();
+        $start = $COURSE->startdate + DAYSECS;
+        $current = (object) [
+            'instance' => 42,
+            'integrationmode' => \mod_googlemeet\local\integration_mode::MANAGED,
+            'calendarid' => 'course-calendar@example.com',
+            'url' => '',
+            'timestart' => $start,
+            'timeend' => $start + HOURSECS,
+            'timezone' => 'America/Sao_Paulo',
+            'recurrence' => null,
+        ];
+
+        $form = new testable_mod_form($current, 0, null, $COURSE);
+        $mform = $form->quickform();
+
+        $this->assertTrue($mform->getElement('calendarid')->isFrozen());
+        $this->assertTrue($mform->getElement('integrationmode')->isFrozen());
+    }
+
+    /**
+     * A non-owner coeditor does not receive the stored Calendar identifier.
+     */
+    public function test_non_owner_sees_only_generic_calendar_state(): void {
+        global $COURSE;
+
+        $this->resetAfterTest();
+        $owner = $this->getDataGenerator()->create_user();
+        $other = $this->getDataGenerator()->create_user();
+        $this->setUser($other);
+        set_config('issuerid', 0, 'googlemeet');
+        $COURSE = $this->getDataGenerator()->create_course();
+        $start = $COURSE->startdate + DAYSECS;
+        $current = (object) [
+            'instance' => 42,
+            'integrationmode' => \mod_googlemeet\local\integration_mode::MANAGED,
+            'owneruserid' => $owner->id,
+            'calendarid' => 'private-owner@example.com',
+            'url' => '',
+            'timestart' => $start,
+            'timeend' => $start + HOURSECS,
+            'timezone' => 'America/Sao_Paulo',
+            'recurrence' => null,
+        ];
+
+        $form = new testable_mod_form($current, 0, null, $COURSE);
+        $mform = $form->quickform();
+
+        $this->assertFalse($mform->elementExists('calendarid'));
+        $this->assertTrue($mform->elementExists('managedcalendarownerstatus'));
+        $this->assertStringNotContainsString(
+            'private-owner@example.com',
+            (string) $mform->getElement('managedcalendarownerstatus')->getValue()
+        );
     }
 
     /**

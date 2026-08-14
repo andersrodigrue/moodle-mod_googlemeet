@@ -51,19 +51,6 @@ final class meeting_form_data {
         'SU' => 7,
     ];
 
-    /** @var string[] Fields retained in the database only for legacy compatibility. */
-    private const LEGACY_FIELDS = [
-        'eventdate',
-        'starthour',
-        'startminute',
-        'endhour',
-        'endminute',
-        'addmultiply',
-        'days',
-        'period',
-        'eventenddate',
-    ];
-
     /**
      * Adds canonical Calendar fields to a copy of submitted form data.
      *
@@ -244,9 +231,8 @@ final class meeting_form_data {
      */
     private function finalize(\stdClass $normalized, \stdClass $source): \stdClass {
         $normalized->originalname = trim((string) ($source->name ?? ''));
-        $normalized->calendarid = 'primary';
         $normalized->sendupdates = 'none';
-        foreach (self::LEGACY_FIELDS as $field) {
+        foreach (upgrade\compatibility_contract::LEGACY_SCHEDULE_FIELDS as $field) {
             unset($normalized->{$field});
         }
 

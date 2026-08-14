@@ -15,7 +15,7 @@
   along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 }}
 {{!
-  @template mod_googlemeet/recordingstable
+  @template mod_googlemeet/upcomingevents
 
   Example context (json):
   {
@@ -33,7 +33,7 @@
 }}
 {{#hasupcomingevents}}
 <div id="googlemeet_upcoming_events">
-  <h4>{{# str }} upcomingevents, mod_googlemeet {{/ str }}</h4>
+  <h3 class="h4">{{# str }} upcomingevents, mod_googlemeet {{/ str }}</h3>
   <div>
     {{#upcomingevents}}
       <span>

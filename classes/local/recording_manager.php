@@ -19,6 +19,7 @@ namespace mod_googlemeet\local;
 use mod_googlemeet\api\recording_api_exception;
 use mod_googlemeet\api\recording_authorization_exception;
 use mod_googlemeet\api\recording_response_exception;
+use mod_googlemeet\api\recording_transport_exception;
 use mod_googlemeet\task\discover_recordings;
 
 /**
@@ -42,22 +43,28 @@ final class recording_manager {
     /** @var recording_discovery_provider|null Production discovery provider. */
     private ?recording_discovery_provider $provider;
 
+    /** @var diagnostic_recorder Privacy-safe operational recorder. */
+    private diagnostic_recorder $diagnostics;
+
     /**
      * @param recording_repository|null $repository Recording repository.
      * @param meeting_lock|null $lock Per-activity lock.
      * @param recording_discovery|null $discovery Injected discovery service.
      * @param recording_discovery_provider|null $provider Production discovery provider.
+     * @param diagnostic_recorder|null $diagnostics Operational recorder.
      */
     public function __construct(
         ?recording_repository $repository = null,
         ?meeting_lock $lock = null,
         ?recording_discovery $discovery = null,
-        ?recording_discovery_provider $provider = null
+        ?recording_discovery_provider $provider = null,
+        ?diagnostic_recorder $diagnostics = null
     ) {
         $this->repository = $repository ?? new recording_repository();
         $this->lock = $lock ?? new meeting_lock();
         $this->discovery = $discovery;
         $this->provider = $provider;
+        $this->diagnostics = $diagnostics ?? new diagnostic_recorder();
     }
 
     /**
@@ -119,6 +126,12 @@ final class recording_manager {
             }
 
             $meeting = $this->repository->start_attempt($googlemeetid);
+            $this->diagnostics->record(
+                $googlemeetid,
+                diagnostic_recorder::OPERATION_RECORDING_DISCOVERY,
+                diagnostic_recorder::OUTCOME_STARTED,
+                diagnostic_recorder::SOURCE_ADHOC
+            );
             try {
                 $discovery = $this->discovery ?? $this->provider?->create($meeting);
                 if ($discovery === null) {
@@ -131,12 +144,22 @@ final class recording_manager {
                     'recording_authorization_required',
                     get_string('recordingsoauthrequired', 'mod_googlemeet')
                 );
+                $this->record_outcome(
+                    $googlemeetid,
+                    diagnostic_recorder::OUTCOME_BLOCKED,
+                    'recording_authorization_required'
+                );
                 return;
             } catch (recording_api_exception $e) {
                 $this->repository->mark_failed(
                     $googlemeetid,
                     $e->error_code(),
                     get_string('recordingsapifailed', 'mod_googlemeet')
+                );
+                $this->record_outcome(
+                    $googlemeetid,
+                    diagnostic_recorder::OUTCOME_FAILED,
+                    $e->error_code()
                 );
                 return;
             } catch (recording_response_exception $e) {
@@ -145,10 +168,27 @@ final class recording_manager {
                     'recording_response_invalid',
                     get_string('recordingsresponseinvalid', 'mod_googlemeet')
                 );
+                $this->record_outcome(
+                    $googlemeetid,
+                    diagnostic_recorder::OUTCOME_FAILED,
+                    'recording_response_invalid'
+                );
                 return;
+            } catch (recording_transport_exception $e) {
+                $this->record_outcome(
+                    $googlemeetid,
+                    diagnostic_recorder::OUTCOME_RETRYING,
+                    'recording_transport_failure'
+                );
+                throw $e;
             }
 
             $this->repository->apply_artifacts($googlemeetid, $artifacts);
+            $this->record_outcome(
+                $googlemeetid,
+                diagnostic_recorder::OUTCOME_SUCCEEDED,
+                $artifacts === [] ? 'no_new_artifacts' : 'artifacts_discovered'
+            );
             mtrace(get_string('recordingssynced', 'mod_googlemeet', (object) [
                 'id' => $googlemeetid,
                 'count' => count($artifacts),
@@ -190,7 +230,32 @@ final class recording_manager {
         if ($queued && $transitionrequired) {
             $this->repository->transition((int) $meeting->id, recording_sync_state::QUEUED);
         }
+        if ($queued) {
+            $this->diagnostics->record(
+                (int) $meeting->id,
+                diagnostic_recorder::OPERATION_RECORDING_DISCOVERY,
+                diagnostic_recorder::OUTCOME_QUEUED,
+                diagnostic_recorder::SOURCE_USER
+            );
+        }
 
         return $queued;
+    }
+
+    /**
+     * Records one recording discovery outcome.
+     *
+     * @param int $googlemeetid Activity instance ID.
+     * @param string $outcome Closed outcome.
+     * @param string|null $code Stable code.
+     */
+    private function record_outcome(int $googlemeetid, string $outcome, ?string $code = null): void {
+        $this->diagnostics->record(
+            $googlemeetid,
+            diagnostic_recorder::OPERATION_RECORDING_DISCOVERY,
+            $outcome,
+            diagnostic_recorder::SOURCE_ADHOC,
+            $code
+        );
     }
 }

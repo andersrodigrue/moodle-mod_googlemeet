@@ -19,6 +19,7 @@ namespace mod_googlemeet\task;
 use mod_googlemeet\api\calendar_guest_limit_exception;
 use mod_googlemeet\local\calendar_guest_repository;
 use mod_googlemeet\local\calendar_guest_resolver;
+use mod_googlemeet\local\diagnostic_recorder;
 use mod_googlemeet\local\meeting_manager;
 
 /**
@@ -55,6 +56,7 @@ final class reconcile_calendar_guests extends \core\task\scheduled_task {
         $repository = new calendar_guest_repository();
         $resolver = new calendar_guest_resolver();
         $manager = new meeting_manager();
+        $diagnostics = new diagnostic_recorder();
         $now = \core\di::get(\core\clock::class)->time();
         $candidates = $repository->reconciliation_candidates(
             $now - self::CHECK_INTERVAL,
@@ -73,8 +75,18 @@ final class reconcile_calendar_guests extends \core\task\scheduled_task {
             }
 
             if ($changed) {
-                if ($manager->queue((int) $meeting->id, (int) $meeting->owneruserid)) {
+                if ($manager->queue(
+                    (int) $meeting->id,
+                    (int) $meeting->owneruserid,
+                    diagnostic_recorder::SOURCE_CRON
+                )) {
                     $queued++;
+                    $diagnostics->record(
+                        (int) $meeting->id,
+                        diagnostic_recorder::OPERATION_GUEST_RECONCILE,
+                        diagnostic_recorder::OUTCOME_QUEUED,
+                        diagnostic_recorder::SOURCE_CRON
+                    );
                 }
             } else {
                 $unchanged++;

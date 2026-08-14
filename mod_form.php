@@ -25,7 +25,14 @@
 defined('MOODLE_INTERNAL') || die();
 
 use mod_googlemeet\api\calendar_authorization_exception;
+use mod_googlemeet\api\calendar_api_exception;
+use mod_googlemeet\api\calendar_configuration_exception;
 use mod_googlemeet\api\calendar_guest_limit_exception;
+use mod_googlemeet\api\calendar_response_exception;
+use mod_googlemeet\api\calendar_transport_exception;
+use mod_googlemeet\api\google_calendar_client;
+use mod_googlemeet\api\moodle_oauth_http_client;
+use mod_googlemeet\local\calendar_catalog;
 use mod_googlemeet\local\calendar_guest_policy;
 use mod_googlemeet\local\calendar_guest_resolver;
 use mod_googlemeet\local\integration_mode;
@@ -52,14 +59,43 @@ class mod_googlemeet_mod_form extends moodleform_mod {
         $config = get_config('googlemeet');
         $mform = $this->_form;
         $issuerid = (int) ($config->issuerid ?? 0);
+        $managedownerblocked = !empty($this->current->instance)
+            && ($this->current->integrationmode ?? null) === integration_mode::MANAGED
+            && (int) ($this->current->owneruserid ?? 0) > 0
+            && (int) $this->current->owneruserid !== (int) $USER->id;
         $managedclient = null;
         $managedauthorized = false;
-        if ($issuerid > 0) {
+        $managedreauthorization = false;
+        $managedcalendarerror = null;
+        $managedcalendars = [];
+        if ($issuerid > 0 && !$managedownerblocked) {
             try {
                 $managedclient = (new oauth_manager())->authorization_client($issuerid, (int) $USER->id);
                 $managedauthorized = $managedclient->is_logged_in();
             } catch (calendar_authorization_exception | moodle_exception) {
                 $managedclient = null;
+            }
+        }
+        if ($managedauthorized) {
+            try {
+                $managedcalendars = (new calendar_catalog(
+                    new google_calendar_client(new moodle_oauth_http_client($managedclient))
+                ))->writable_calendars();
+                if ($managedcalendars === []) {
+                    $managedcalendarerror = 'managedcalendarnone';
+                }
+            } catch (calendar_authorization_exception) {
+                // Existing grants from older plugin versions can be valid while
+                // lacking the read-only CalendarList scope introduced here.
+                $managedauthorized = false;
+                $managedreauthorization = true;
+            } catch (
+                calendar_api_exception
+                | calendar_configuration_exception
+                | calendar_response_exception
+                | calendar_transport_exception
+            ) {
+                $managedcalendarerror = 'managedcalendarpreflightunavailable';
             }
         }
 
@@ -112,7 +148,23 @@ class mod_googlemeet_mod_form extends moodleform_mod {
             );
         }
 
-        if ($managedauthorized) {
+        if ($managedreauthorization && $managedclient !== null) {
+            $loginurl = new moodle_url($managedclient->get_login_url());
+            $button = html_writer::link(
+                $loginurl,
+                get_string('managedoauthreconnect', 'googlemeet'),
+                [
+                    'class' => 'btn btn-primary',
+                    'target' => '_blank',
+                    'rel' => 'noopener',
+                ]
+            );
+            $oauthstatus = $OUTPUT->notification(
+                get_string('managedoauthreauthorizerequired', 'googlemeet')
+                    . html_writer::div($button, 'mt-2'),
+                'warning'
+            );
+        } else if ($managedauthorized) {
             $oauthstatus = $OUTPUT->notification(get_string('managedoauthconnected', 'googlemeet'), 'success');
         } else if ($managedclient !== null) {
             $loginurl = new moodle_url($managedclient->get_login_url());
@@ -134,6 +186,89 @@ class mod_googlemeet_mod_form extends moodleform_mod {
         }
         $mform->addElement('static', 'managedoauthstatus', get_string('managedoauth', 'googlemeet'), $oauthstatus);
         $mform->hideIf('managedoauthstatus', 'integrationmode', 'neq', integration_mode::MANAGED);
+
+        $storedcalendarid = '';
+        $calendarlocked = false;
+        if (
+            !empty($this->current->instance)
+            && ($this->current->integrationmode ?? null) === integration_mode::MANAGED
+            && trim((string) ($this->current->calendarid ?? '')) !== ''
+        ) {
+            $storedcalendarid = trim((string) $this->current->calendarid);
+            $calendarlocked = true;
+        }
+
+        if ($managedownerblocked && $calendarlocked) {
+            $mform->addElement(
+                'static',
+                'managedcalendarownerstatus',
+                get_string('managedcalendar', 'googlemeet'),
+                get_string('managedcalendarotherowner', 'googlemeet')
+            );
+            $mform->hideIf(
+                'managedcalendarownerstatus',
+                'integrationmode',
+                'neq',
+                integration_mode::MANAGED
+            );
+        } else {
+            $calendaroptions = [];
+            $defaultcalendarid = null;
+            if ($calendarlocked) {
+                $calendaroptions[$storedcalendarid] = get_string(
+                    'managedcalendarlockedoption',
+                    'googlemeet',
+                    $storedcalendarid
+                );
+                $defaultcalendarid = $storedcalendarid;
+            } else {
+                foreach ($managedcalendars as $calendar) {
+                    $label = get_string('managedcalendaroption', 'googlemeet', (object) [
+                        'summary' => $calendar['summary'],
+                        'id' => $calendar['id'],
+                    ]);
+                    if ($calendar['primary']) {
+                        $label .= ' ' . get_string('managedcalendarprimary', 'googlemeet');
+                        $defaultcalendarid = $calendar['id'];
+                    }
+                    $calendaroptions[$calendar['id']] = $label;
+                    $defaultcalendarid ??= $calendar['id'];
+                }
+            }
+            if ($calendaroptions === []) {
+                $calendaroptions[''] = get_string('managedcalendarnone', 'googlemeet');
+            }
+
+            $mform->addElement(
+                'select',
+                'calendarid',
+                get_string('managedcalendar', 'googlemeet'),
+                $calendaroptions
+            );
+            $mform->setType('calendarid', PARAM_RAW_TRIMMED);
+            if ($defaultcalendarid !== null) {
+                $mform->setDefault('calendarid', $defaultcalendarid);
+            }
+            $mform->addHelpButton('calendarid', 'managedcalendar', 'googlemeet');
+            $mform->hideIf('calendarid', 'integrationmode', 'neq', integration_mode::MANAGED);
+            if ($calendarlocked) {
+                $mform->freeze('calendarid');
+            }
+            if ($managedcalendarerror !== null) {
+                $mform->addElement(
+                    'static',
+                    'managedcalendarstatus',
+                    '',
+                    $OUTPUT->notification(get_string($managedcalendarerror, 'googlemeet'), 'warning')
+                );
+                $mform->hideIf(
+                    'managedcalendarstatus',
+                    'integrationmode',
+                    'neq',
+                    integration_mode::MANAGED
+                );
+            }
+        }
 
         $mform->addElement(
             'select',
@@ -438,6 +573,7 @@ class mod_googlemeet_mod_form extends moodleform_mod {
                 return $errors;
             }
             $issuerid = (int) get_config('googlemeet', 'issuerid');
+            $oauthclient = null;
             if ($issuerid <= 0) {
                 $errors['integrationmode'] = get_string('managedoauthunavailable', 'googlemeet');
             } else {
@@ -448,6 +584,38 @@ class mod_googlemeet_mod_form extends moodleform_mod {
                     }
                 } catch (calendar_authorization_exception | moodle_exception) {
                     $errors['integrationmode'] = get_string('managedoauthunavailable', 'googlemeet');
+                }
+            }
+            $calendarid = trim((string) (
+                !empty($this->current->instance)
+                && ($this->current->integrationmode ?? null) === integration_mode::MANAGED
+                && trim((string) ($this->current->calendarid ?? '')) !== ''
+                    ? $this->current->calendarid
+                    : ($data['calendarid'] ?? '')
+            ));
+            if ($calendarid === '') {
+                $errors['calendarid'] = get_string('managedcalendarrequired', 'googlemeet');
+            } else if ($oauthclient !== null && !isset($errors['integrationmode'])) {
+                try {
+                    (new calendar_catalog(
+                        new google_calendar_client(new moodle_oauth_http_client($oauthclient))
+                    ))->require_writable($calendarid);
+                } catch (calendar_authorization_exception) {
+                    $errors['integrationmode'] = get_string(
+                        'managedoauthreauthorizerequired',
+                        'googlemeet'
+                    );
+                } catch (calendar_configuration_exception) {
+                    $errors['calendarid'] = get_string('managedcalendarunavailable', 'googlemeet');
+                } catch (
+                    calendar_api_exception
+                    | calendar_response_exception
+                    | calendar_transport_exception
+                ) {
+                    $errors['calendarid'] = get_string(
+                        'managedcalendarpreflightunavailable',
+                        'googlemeet'
+                    );
                 }
             }
             $guestpolicy = (string) ($data['guestpolicy'] ?? calendar_guest_policy::NONE);

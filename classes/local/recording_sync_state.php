@@ -41,6 +41,16 @@ final class recording_sync_state {
     ];
 
     /**
+     * Whether a stored recording synchronization state is supported.
+     *
+     * @param string $state State value.
+     * @return bool
+     */
+    public static function is_valid(string $state): bool {
+        return isset(self::TRANSITIONS[$state]);
+    }
+
+    /**
      * Rejects an invalid recording state transition.
      *
      * @param string $current Current state.

@@ -18,6 +18,7 @@ namespace mod_googlemeet\output;
 
 use mod_googlemeet\local\sync_state;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * Tests for the synchronization status presentation model.
@@ -29,6 +30,63 @@ use PHPUnit\Framework\Attributes\CoversClass;
  */
 #[CoversClass(sync_status::class)]
 final class sync_status_test extends \advanced_testcase {
+
+    /**
+     * Every Calendar lifecycle state has a deterministic accessible summary.
+     *
+     * @param string $state Stored state.
+     * @param string $badge Expected Bootstrap badge.
+     * @param bool $inprogress Whether a progress indicator is shown.
+     */
+    #[DataProvider('calendar_state_provider')]
+    public function test_every_calendar_state_has_a_presentation(
+        string $state,
+        string $badge,
+        bool $inprogress
+    ): void {
+        $data = (new sync_status((object) [
+            'syncstatus' => $state,
+        ]))->export_for_template($this->renderer());
+
+        $this->assertSame($state, $data['state']);
+        $this->assertSame($badge, $data['badgeclass']);
+        $this->assertSame($inprogress, $data['inprogress']);
+        $this->assertSame(
+            get_string('syncstatus' . $state, 'mod_googlemeet'),
+            $data['label']
+        );
+    }
+
+    /**
+     * Calendar state presentation cases.
+     *
+     * @return array<string, array{string, string, bool}>
+     */
+    public static function calendar_state_provider(): array {
+        return [
+            'draft' => [sync_state::DRAFT, 'text-bg-info', true],
+            'queued' => [sync_state::QUEUED, 'text-bg-info', true],
+            'syncing' => [sync_state::SYNCING, 'text-bg-info', true],
+            'pending' => [sync_state::PENDING, 'text-bg-info', true],
+            'ready' => [sync_state::READY, 'text-bg-success', false],
+            'failed' => [sync_state::FAILED, 'text-bg-danger', false],
+            'cancelling' => [sync_state::CANCELLING, 'text-bg-info', true],
+            'cancelled' => [sync_state::CANCELLED, 'text-bg-secondary', false],
+            'disconnected' => [sync_state::DISCONNECTED, 'text-bg-danger', false],
+        ];
+    }
+
+    /**
+     * Invalid stored Calendar state fails closed as a generic failure.
+     */
+    public function test_invalid_calendar_state_falls_back_to_failed(): void {
+        $data = (new sync_status((object) [
+            'syncstatus' => 'unexpected',
+        ]))->export_for_template($this->renderer());
+
+        $this->assertSame(sync_state::FAILED, $data['state']);
+        $this->assertSame('text-bg-danger', $data['badgeclass']);
+    }
 
     /**
      * Pending meetings are presented as in progress without diagnostics.
@@ -125,6 +183,26 @@ final class sync_status_test extends \advanced_testcase {
         $this->assertFalse($data['canretry']);
         $this->assertFalse($data['canreconnect']);
         $this->assertFalse($data['cancancel']);
+    }
+
+    /**
+     * The status card renders semantic progress and POST command controls.
+     */
+    public function test_template_renders_accessible_session_protected_controls(): void {
+        global $OUTPUT;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $html = $OUTPUT->render(new sync_status((object) [
+            'syncstatus' => sync_state::PENDING,
+        ], false, 42, true));
+
+        $this->assertStringContainsString('role="status"', $html);
+        $this->assertStringContainsString('visually-hidden', $html);
+        $this->assertStringContainsString('aria-labelledby=', $html);
+        $this->assertStringContainsString('method="post"', $html);
+        $this->assertStringContainsString('name="sesskey"', $html);
+        $this->assertStringNotContainsString('onclick=', $html);
     }
 
     /**

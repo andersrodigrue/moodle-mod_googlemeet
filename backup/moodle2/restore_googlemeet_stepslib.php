@@ -146,7 +146,7 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
 
         if ($mode === \mod_googlemeet\local\integration_mode::MANAGED) {
             $data->integrationmode = \mod_googlemeet\local\integration_mode::MANAGED;
-            $data->calendarid = 'primary';
+            $data->calendarid = null;
             $data->url = '';
             $data->meetinguri = null;
             $data->syncstatus = \mod_googlemeet\local\sync_state::DISCONNECTED;

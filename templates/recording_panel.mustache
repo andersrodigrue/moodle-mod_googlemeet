@@ -1,0 +1,86 @@
+{{!
+    @template mod_googlemeet/recording_panel
+
+    Recording presentation and owner-scoped discovery controls.
+}}
+<section
+    id="googlemeet_recordings"
+    class="googlemeet_recordings"
+    aria-labelledby="googlemeet-recordings-heading-{{coursemoduleid}}"
+>
+    {{> mod_googlemeet/recordingstable }}
+    {{#showsync}}
+        <div
+            id="googlemeet_recording_sync"
+            class="card mt-4"
+            data-region="recording-sync-status"
+            data-state="{{recordingsyncstate}}"
+            aria-labelledby="googlemeet-recordings-sync-heading-{{coursemoduleid}}"
+        >
+            <div class="card-body">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <h3 id="googlemeet-recordings-sync-heading-{{coursemoduleid}}" class="h5 mb-0">
+                        {{#str}} recordingsyncstatus, mod_googlemeet {{/str}}
+                    </h3>
+                    <span class="badge {{recordingsyncbadgeclass}}">{{recordingsynclabel}}</span>
+                    {{#recordingsyncinprogress}}
+                        <span class="spinner-border spinner-border-sm" role="status">
+                            <span class="visually-hidden">{{#str}} loading, mod_googlemeet {{/str}}</span>
+                        </span>
+                    {{/recordingsyncinprogress}}
+                </div>
+                <dl class="row mb-0 mt-3">
+                    <dt class="col-sm-4">{{#str}} lastsync, mod_googlemeet {{/str}}</dt>
+                    <dd class="col-sm-8">{{lastsyncvalue}}</dd>
+                </dl>
+                {{#hasrecordingerror}}
+                    <div class="alert alert-warning mt-3 mb-0" role="alert">
+                        {{recordingerrormessage}}
+                    </div>
+                {{/hasrecordingerror}}
+                {{#hasoauthnotice}}
+                    <div class="alert {{oauthnoticeclass}} mt-3 mb-0" role="{{oauthnoticerole}}">
+                        {{oauthnoticemessage}}
+                    </div>
+                {{/hasoauthnotice}}
+                {{#oauthconnected}}
+                    <p class="small text-muted mt-3 mb-0">{{oauthconnectedmessage}}</p>
+                {{/oauthconnected}}
+                {{#hasrecordingactions}}
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                    {{#canconnect}}
+                        <a
+                            href="{{connecturl}}"
+                            class="btn btn-primary"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            {{#str}} recordingsoauthconnect, mod_googlemeet {{/str}}
+                        </a>
+                    {{/canconnect}}
+                    {{#cansync}}
+                        <form method="post" action="{{commandurl}}">
+                            <input type="hidden" name="id" value="{{cmid}}">
+                            <input type="hidden" name="action" value="sync">
+                            <input type="hidden" name="sesskey" value="{{sesskey}}">
+                            <button type="submit" class="btn btn-primary">
+                                {{#str}} recordingssync, mod_googlemeet {{/str}}
+                            </button>
+                        </form>
+                    {{/cansync}}
+                    {{#candisconnect}}
+                        <form method="post" action="{{commandurl}}">
+                            <input type="hidden" name="id" value="{{cmid}}">
+                            <input type="hidden" name="action" value="disconnect">
+                            <input type="hidden" name="sesskey" value="{{sesskey}}">
+                            <button type="submit" class="btn btn-outline-secondary">
+                                {{#str}} recordingsdisconnect, mod_googlemeet {{/str}}
+                            </button>
+                        </form>
+                    {{/candisconnect}}
+                </div>
+                {{/hasrecordingactions}}
+            </div>
+        </div>
+    {{/showsync}}
+</section>

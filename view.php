@@ -23,14 +23,14 @@
  */
 
 use mod_googlemeet\local\integration_mode;
+use mod_googlemeet\local\meeting_access_policy;
 use mod_googlemeet\local\sync_state;
+use mod_googlemeet\output\activity_actions;
 use mod_googlemeet\output\sync_status;
 
 require(__DIR__ . '/../../config.php');
 require_once(__DIR__ . '/lib.php');
 require_once(__DIR__ . '/locallib.php');
-
-$config = get_config('googlemeet');
 
 $id = optional_param('id', 0, PARAM_INT);
 $g = optional_param('g', 0, PARAM_INT);
@@ -54,10 +54,8 @@ require_capability('mod/googlemeet:view', $context);
 $PAGE->set_url('/mod/googlemeet/view.php', array('id' => $cm->id));
 $PAGE->set_context($context);
 
-// Prefer the validated managed URI while retaining the legacy URL fallback.
-$url = trim((string) ($googlemeet->meetinguri ?: $googlemeet->url));
-$pattern = "/^https:\/\/meet.google.com\/[-a-zA-Z0-9@:%._\+~#=]{3}-[-a-zA-Z0-9@:%._\+~#=]{4}-[-a-zA-Z0-9@:%._\+~#=]{3}$/";
-$hasvalidurl = (bool) preg_match($pattern, $url);
+$canmanage = has_capability('mod/googlemeet:managemeeting', $context);
+$access = (new meeting_access_policy())->evaluate($googlemeet, $canmanage);
 
 // Completion and trigger events.
 googlemeet_view($googlemeet, $course, $cm, $context);
@@ -72,65 +70,22 @@ if (
 ) {
     echo $OUTPUT->render(new sync_status(
         $googlemeet,
-        has_capability('mod/googlemeet:editrecording', $context),
+        $canmanage,
         (int) $cm->id,
-        has_capability('mod/googlemeet:managemeeting', $context)
-            && (int) ($googlemeet->owneruserid ?? 0) === (int) $USER->id
+        $canmanage && (int) ($googlemeet->owneruserid ?? 0) === (int) $USER->id
     ));
 }
 
-if ($googlemeet->syncstatus === sync_state::READY && $hasvalidurl) {
-    echo html_writer::link(
-        $url,
-        get_string('entertheroom', 'googlemeet'),
-        [
-            'class' => 'btn btn-primary',
-            'target' => '_blank',
-            'rel' => 'noopener',
-            'title' => get_string('entertheroom', 'googlemeet'),
-        ]
-    );
-} else if ($googlemeet->syncstatus === sync_state::READY) {
-    echo $OUTPUT->notification(get_string('invalidstoredurl', 'googlemeet'), 'error');
-} else {
-    echo $OUTPUT->notification(get_string('meetinglinknotready', 'googlemeet'), 'info');
-}
-
-if (has_capability('mod/googlemeet:editrecording', $context)) {
-    $eventdetailsurl = null;
-    if ($googlemeet->integrationmode === integration_mode::MANAGED) {
-        $candidate = trim((string) ($googlemeet->googleeventhtmlurl ?? ''));
-        $parts = $candidate === '' ? false : parse_url($candidate);
-        if (
-            is_array($parts) &&
-            ($parts['scheme'] ?? null) === 'https' &&
-            in_array(($parts['host'] ?? null), ['calendar.google.com', 'www.google.com'], true)
-        ) {
-            $eventdetailsurl = $candidate;
-        }
-    } else if (!empty($googlemeet->eventid)) {
-        $eventdetailsurl = 'https://calendar.google.com/calendar/u/0/r/eventedit/'
-            . rawurlencode((string) $googlemeet->eventid);
-    }
-
-    if ($eventdetailsurl !== null) {
-        echo html_writer::link(
-            $eventdetailsurl,
-            get_string('eventdetails', 'googlemeet'),
-            [
-                'class' => 'btn btn-outline-primary ms-2',
-                'target' => '_blank',
-                'rel' => 'noopener',
-                'title' => get_string('eventdetails', 'googlemeet'),
-            ]
-        );
-    }
-}
+echo $OUTPUT->render(new activity_actions(
+    $googlemeet,
+    $access,
+    (int) $cm->id,
+    $canmanage
+));
 
 echo $OUTPUT->render_from_template('mod_googlemeet/upcomingevents', googlemeet_get_upcoming_events($googlemeet->id));
 
-if ($hasvalidurl) {
-    googlemeet_print_recordings($googlemeet, $cm, $context);
-}
+// Recording access is independent from the live meeting access window.
+googlemeet_print_recordings($googlemeet, $cm, $context);
 
 echo $OUTPUT->footer();

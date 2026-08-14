@@ -26,10 +26,10 @@ namespace mod_googlemeet\api;
  * @copyright   2026 Anderson Rodrigues
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-final class google_calendar_client implements calendar_client {
+final class google_calendar_client implements calendar_client, calendar_list_client {
 
-    /** Calendar Events API base URL. */
-    private const API_BASE = 'https://www.googleapis.com/calendar/v3/calendars/';
+    /** Google Calendar API base URL. */
+    private const API_BASE = 'https://www.googleapis.com/calendar/v3/';
 
     /** Error reasons that must be retried with backoff by the task runner. */
     private const RETRYABLE_REASONS = [
@@ -130,6 +130,43 @@ final class google_calendar_client implements calendar_client {
     }
 
     /**
+     * Lists one bounded page of calendars with at least writer access.
+     *
+     * @param string|null $pagetoken Opaque token returned by Google.
+     * @return array<string, mixed>
+     */
+    public function list_writable_calendars(?string $pagetoken = null): array {
+        $parameters = [
+            'maxResults' => 250,
+            'minAccessRole' => 'writer',
+            'showDeleted' => 'false',
+            // Hidden is only a Calendar UI preference, not an access role. It
+            // must not make a still-writable attached calendar look revoked.
+            'showHidden' => 'true',
+        ];
+        if ($pagetoken !== null) {
+            $pagetoken = trim($pagetoken);
+            if (
+                $pagetoken === ''
+                || strlen($pagetoken) > 2048
+                || preg_match('/[\x00-\x1F\x7F]/', $pagetoken)
+            ) {
+                throw new calendar_configuration_exception(
+                    'The CalendarList page token is invalid.'
+                );
+            }
+            $parameters['pageToken'] = $pagetoken;
+        }
+
+        return $this->send(
+            'GET',
+            self::API_BASE . 'users/me/calendarList?'
+                . http_build_query($parameters, '', '&', PHP_QUERY_RFC3986),
+            null
+        );
+    }
+
+    /**
      * Builds an event collection URL.
      *
      * @param string $calendarid Google Calendar identifier.
@@ -142,7 +179,8 @@ final class google_calendar_client implements calendar_client {
             throw new calendar_configuration_exception('A Google Calendar identifier is required.');
         }
 
-        return self::API_BASE . rawurlencode($calendarid) . '/events' . $this->query_string($parameters);
+        return self::API_BASE . 'calendars/' . rawurlencode($calendarid)
+            . '/events' . $this->query_string($parameters);
     }
 
     /**

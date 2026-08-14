@@ -25,6 +25,13 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$ADMIN->add('modsettings', new admin_externalpage(
+    'mod_googlemeet_diagnostics',
+    get_string('diagnosticspagetitle', 'mod_googlemeet'),
+    new moodle_url('/mod/googlemeet/diagnostics.php'),
+    'mod/googlemeet:viewdiagnostics'
+));
+
 if ($ADMIN->fulltree) {
 
     $options = [''];
@@ -89,6 +96,49 @@ if ($ADMIN->fulltree) {
         get_string('minutesbefore_help', 'googlemeet'),
         10,
         $minutes
+    ));
+
+    $joinbeforeoptions = [];
+    foreach (\mod_googlemeet\local\meeting_access_policy::before_options() as $value) {
+        $joinbeforeoptions[$value] = $value === 0
+            ? get_string('meetingaccessatstart', 'mod_googlemeet')
+            : format_time($value * MINSECS);
+    }
+    $settings->add(new admin_setting_configselect(
+        'googlemeet/joinbeforeminutes',
+        get_string('joinbeforeminutes', 'mod_googlemeet'),
+        get_string('joinbeforeminutes_desc', 'mod_googlemeet'),
+        \mod_googlemeet\local\meeting_access_policy::DEFAULT_BEFORE_MINUTES,
+        $joinbeforeoptions
+    ));
+
+    $joinafteroptions = [];
+    foreach (\mod_googlemeet\local\meeting_access_policy::after_options() as $value) {
+        $joinafteroptions[$value] = $value === 0
+            ? get_string('meetingaccessatend', 'mod_googlemeet')
+            : format_time($value * MINSECS);
+    }
+    $settings->add(new admin_setting_configselect(
+        'googlemeet/joinafterminutes',
+        get_string('joinafterminutes', 'mod_googlemeet'),
+        get_string('joinafterminutes_desc', 'mod_googlemeet'),
+        \mod_googlemeet\local\meeting_access_policy::DEFAULT_AFTER_MINUTES,
+        $joinafteroptions
+    ));
+
+    $settings->add(new admin_setting_configselect(
+        'googlemeet/diagnosticretentiondays',
+        get_string('diagnosticretentiondays', 'googlemeet'),
+        get_string('diagnosticretentiondays_desc', 'googlemeet'),
+        30,
+        [
+            7 => get_string('numdays', 'core', 7),
+            14 => get_string('numdays', 'core', 14),
+            30 => get_string('numdays', 'core', 30),
+            60 => get_string('numdays', 'core', 60),
+            90 => get_string('numdays', 'core', 90),
+            180 => get_string('numdays', 'core', 180),
+        ]
     ));
 
     $settings->add(new admin_setting_confightmleditor(

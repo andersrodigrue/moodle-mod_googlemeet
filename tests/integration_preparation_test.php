@@ -18,6 +18,8 @@ namespace mod_googlemeet;
 
 require_once(__DIR__ . '/../lib.php');
 
+use mod_googlemeet\api\calendar_list_client;
+use mod_googlemeet\local\calendar_catalog;
 use mod_googlemeet\local\calendar_guest_policy;
 use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\oauth_manager;
@@ -57,6 +59,35 @@ final class integration_preparation_issuer {
         return $type === 'authorization'
             ? 'https://accounts.google.com/o/oauth2/v2/auth'
             : false;
+    }
+}
+
+/**
+ * Owner CalendarList transport used by integration preparation tests.
+ *
+ * @package     mod_googlemeet
+ * @category    test
+ * @copyright   2026 Anderson Rodrigues
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+final class integration_preparation_calendar_list_client implements calendar_list_client {
+
+    /** @var array<int, array<string, mixed>> Writable CalendarList entries. */
+    private array $items;
+
+    /**
+     * @param array<int, array<string, mixed>> $items Writable CalendarList entries.
+     */
+    public function __construct(array $items) {
+        $this->items = $items;
+    }
+
+    /**
+     * @param string|null $pagetoken Opaque Google page token.
+     * @return array<string, mixed>
+     */
+    public function list_writable_calendars(?string $pagetoken = null): array {
+        return ['items' => $this->items];
     }
 }
 
@@ -120,6 +151,7 @@ final class integration_preparation_test extends \advanced_testcase {
         );
         $data = (object) [
             'integrationmode' => integration_mode::MANAGED,
+            'calendarid' => 'course-calendar@example.com',
             'owneruserid' => 999,
             'oauthissuerid' => 888,
             'googleeventid' => 'attacker-controlled',
@@ -129,11 +161,18 @@ final class integration_preparation_test extends \advanced_testcase {
             'url' => 'https://meet.google.com/abc-defg-hij',
         ];
 
-        $result = \googlemeet_prepare_integration($data, null, $manager);
+        $result = \googlemeet_prepare_integration(
+            $data,
+            null,
+            $manager,
+            $this->calendar_catalog([
+                $this->calendar('course-calendar@example.com', 'Course calendar', false, 'writer'),
+            ])
+        );
 
         $this->assertSame((int) $user->id, $result->owneruserid);
         $this->assertSame(17, $result->oauthissuerid);
-        $this->assertSame('primary', $result->calendarid);
+        $this->assertSame('course-calendar@example.com', $result->calendarid);
         $this->assertSame(sync_state::DRAFT, $result->syncstatus);
         $this->assertSame('', $result->url);
         $this->assertNull($result->meetinguri);
@@ -229,13 +268,129 @@ final class integration_preparation_test extends \advanced_testcase {
         ];
 
         $result = \googlemeet_prepare_integration(
-            (object) ['integrationmode' => integration_mode::MANAGED],
+            (object) [
+                'integrationmode' => integration_mode::MANAGED,
+                'calendarid' => 'restored-calendar@example.com',
+            ],
             $existing,
-            $manager
+            $manager,
+            $this->calendar_catalog([
+                $this->calendar('restored-calendar@example.com', 'Restored calendar'),
+            ])
         );
 
         $this->assertSame((int) $user->id, $result->owneruserid);
         $this->assertSame(17, $result->oauthissuerid);
-        $this->assertSame('primary', $result->calendarid);
+        $this->assertSame('restored-calendar@example.com', $result->calendarid);
+    }
+
+    /**
+     * An existing event cannot be redirected by a forged Calendar selection.
+     */
+    public function test_existing_managed_calendar_is_immutable(): void {
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        set_config('issuerid', 17, 'googlemeet');
+
+        $client = $this->createMock(\core\oauth2\client::class);
+        $client->expects($this->once())->method('is_logged_in')->willReturn(true);
+        $manager = new oauth_manager(
+            static fn(int $issuerid) => new integration_preparation_issuer(),
+            static fn() => $client
+        );
+        $existing = (object) [
+            'integrationmode' => integration_mode::MANAGED,
+            'owneruserid' => $user->id,
+            'calendarid' => 'bound-calendar@example.com',
+            'url' => '',
+            'meetinguri' => null,
+        ];
+
+        $result = \googlemeet_prepare_integration(
+            (object) [
+                'integrationmode' => integration_mode::MANAGED,
+                'calendarid' => 'attacker-calendar@example.com',
+            ],
+            $existing,
+            $manager,
+            $this->calendar_catalog([
+                $this->calendar('bound-calendar@example.com', 'Bound calendar'),
+                $this->calendar('attacker-calendar@example.com', 'Other calendar'),
+            ])
+        );
+
+        $this->assertSame('bound-calendar@example.com', $result->calendarid);
+    }
+
+    /**
+     * Pre-release primary aliases are upgraded to the exact primary ID on edit.
+     */
+    public function test_existing_primary_alias_is_canonicalized(): void {
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        set_config('issuerid', 17, 'googlemeet');
+
+        $client = $this->createMock(\core\oauth2\client::class);
+        $client->expects($this->once())->method('is_logged_in')->willReturn(true);
+        $manager = new oauth_manager(
+            static fn(int $issuerid) => new integration_preparation_issuer(),
+            static fn() => $client
+        );
+        $existing = (object) [
+            'integrationmode' => integration_mode::MANAGED,
+            'owneruserid' => $user->id,
+            'calendarid' => 'primary',
+            'url' => '',
+            'meetinguri' => null,
+        ];
+
+        $result = \googlemeet_prepare_integration(
+            (object) ['integrationmode' => integration_mode::MANAGED],
+            $existing,
+            $manager,
+            $this->calendar_catalog([
+                $this->calendar('teacher@example.com', 'Teacher', true, 'owner'),
+            ])
+        );
+
+        $this->assertSame('teacher@example.com', $result->calendarid);
+    }
+
+    /**
+     * Builds a deterministic writable Calendar catalog.
+     *
+     * @param array<int, array<string, mixed>> $items CalendarList entries.
+     * @return calendar_catalog
+     */
+    private function calendar_catalog(array $items): calendar_catalog {
+        return new calendar_catalog(new integration_preparation_calendar_list_client($items));
+    }
+
+    /**
+     * Builds one CalendarList entry.
+     *
+     * @param string $id Calendar ID.
+     * @param string $summary Display name.
+     * @param bool $primary Whether this is the primary calendar.
+     * @param string $accessrole Effective user role.
+     * @return array<string, mixed>
+     */
+    private function calendar(
+        string $id,
+        string $summary,
+        bool $primary = false,
+        string $accessrole = 'writer'
+    ): array {
+        return [
+            'id' => $id,
+            'summary' => $summary,
+            'primary' => $primary,
+            'accessRole' => $accessrole,
+            'conferenceProperties' => [
+                'allowedConferenceSolutionTypes' => ['hangoutsMeet'],
+            ],
+        ];
     }
 }

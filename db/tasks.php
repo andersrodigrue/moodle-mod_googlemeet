@@ -52,4 +52,13 @@ $tasks = [
         'dayofweek' => '*',
         'month' => '*',
     ],
+    [
+        'classname' => 'mod_googlemeet\task\purge_diagnostics',
+        'blocking' => 0,
+        'minute' => '41',
+        'hour' => '3',
+        'day' => '*',
+        'dayofweek' => '*',
+        'month' => '*',
+    ],
 ];

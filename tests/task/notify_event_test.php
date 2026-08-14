@@ -76,6 +76,8 @@ final class notify_event_test extends \advanced_testcase {
 
         $this->assertCount(1, $messages);
         $this->assertSame((int) $student->id, (int) $messages[0]->useridto);
+        $this->assertStringContainsString('/mod/googlemeet/view.php', $messages[0]->fullmessagehtml);
+        $this->assertStringNotContainsString('meet.google.com', $messages[0]->fullmessagehtml);
         $this->assertSame(1, $DB->count_records('googlemeet_notify_done'));
     }
 }

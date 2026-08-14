@@ -86,6 +86,12 @@ final class reconcile_calendar_guests_test extends \advanced_testcase {
         $this->assertSame(sync_state::QUEUED, $DB->get_field('googlemeet', 'syncstatus', [
             'id' => $changed->id,
         ]));
+        $this->assertSame(1, $DB->count_records('googlemeet_diagnostics', [
+            'googlemeetid' => $changed->id,
+            'operation' => \mod_googlemeet\local\diagnostic_recorder::OPERATION_GUEST_RECONCILE,
+            'outcome' => \mod_googlemeet\local\diagnostic_recorder::OUTCOME_QUEUED,
+            'source' => \mod_googlemeet\local\diagnostic_recorder::SOURCE_CRON,
+        ]));
         $this->assertSame(get_string('reconcilegueststask', 'mod_googlemeet'), $task->get_name());
     }
 }

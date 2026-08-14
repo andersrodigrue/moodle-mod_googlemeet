@@ -16,6 +16,7 @@
 
 namespace mod_googlemeet\local;
 
+use mod_googlemeet\local\upgrade\compatibility_contract;
 use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
@@ -53,9 +54,9 @@ final class meeting_form_data_test extends \advanced_testcase {
         $this->assertSame('America/Sao_Paulo', $result->timezone);
         $this->assertSame('Writing workshop', $result->originalname);
         $this->assertNull($result->recurrence);
-        $this->assertFalse(property_exists($result, 'eventdate'));
-        $this->assertFalse(property_exists($result, 'starthour'));
-        $this->assertFalse(property_exists($result, 'days'));
+        foreach (compatibility_contract::LEGACY_SCHEDULE_FIELDS as $field) {
+            $this->assertFalse(property_exists($result, $field));
+        }
     }
 
     /**
@@ -95,7 +96,7 @@ final class meeting_form_data_test extends \advanced_testcase {
         $this->assertSame('2026-08-03T10:15:00-03:00', $this->rfc3339($result->timestart));
         $this->assertSame('2026-08-03T11:45:00-03:00', $this->rfc3339($result->timeend));
         $this->assertSame('America/Sao_Paulo', $result->timezone);
-        $this->assertSame('primary', $result->calendarid);
+        $this->assertFalse(property_exists($result, 'calendarid'));
         $this->assertSame('none', $result->sendupdates);
         $this->assertNull($result->recurrence);
     }

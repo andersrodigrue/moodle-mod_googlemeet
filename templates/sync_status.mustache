@@ -3,10 +3,17 @@
 
     Boost-compatible state summary for the managed Calendar lifecycle.
 }}
-<div class="card googlemeet-sync-status mb-3" data-region="googlemeet-sync-status" data-state="{{state}}">
+<div
+    class="card googlemeet-sync-status mb-3"
+    data-region="googlemeet-sync-status"
+    data-state="{{state}}"
+    aria-labelledby="googlemeet-sync-status-heading"
+>
     <div class="card-body">
         <div class="d-flex flex-wrap align-items-center gap-2">
-            <h3 class="h5 mb-0">{{#str}} synchronizationstatus, mod_googlemeet {{/str}}</h3>
+            <h3 id="googlemeet-sync-status-heading" class="h5 mb-0">
+                {{#str}} synchronizationstatus, mod_googlemeet {{/str}}
+            </h3>
             <span class="badge {{badgeclass}}">{{label}}</span>
             {{#inprogress}}
                 <span class="spinner-border spinner-border-sm" role="status">
@@ -46,7 +53,7 @@
                     </form>
                 {{/canretry}}
                 {{#canreconnect}}
-                    <form method="post" action="{{actionurl}}" target="_blank">
+                    <form method="post" action="{{actionurl}}" target="_blank" rel="noopener">
                         <input type="hidden" name="id" value="{{cmid}}">
                         <input type="hidden" name="action" value="reconnect">
                         <input type="hidden" name="sesskey" value="{{sesskey}}">

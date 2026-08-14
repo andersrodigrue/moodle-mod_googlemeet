@@ -56,6 +56,15 @@ $capabilities = [
         ],
     ],
 
+    'mod/googlemeet:viewdiagnostics' => [
+        'captype' => 'read',
+        'riskbitmask' => RISK_CONFIG,
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => [
+            'manager' => CAP_ALLOW,
+        ],
+    ],
+
     'mod/googlemeet:addinstance' => [
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
@@ -98,6 +107,7 @@ $capabilities = [
 
     'mod/googlemeet:removerecording' => [
         'captype' => 'write',
+        'riskbitmask' => RISK_DATALOSS,
         'contextlevel' => CONTEXT_MODULE,
         'archetypes' => [
             'editingteacher' => CAP_ALLOW,

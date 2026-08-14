@@ -340,10 +340,14 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
                 $update->timezone = \core_date::get_server_timezone();
                 $changed = true;
             }
-            if (trim((string) ($meeting->recurrence ?? '')) === '' && count($events) > 1) {
+            $eventtimes = array_values(array_unique(array_map(
+                static fn(\stdClass $event): int => (int) $event->eventdate,
+                array_values($events)
+            )));
+            if (trim((string) ($meeting->recurrence ?? '')) === '' && count($eventtimes) > 1) {
                 $rdates = [];
-                foreach (array_slice(array_values($events), 1) as $event) {
-                    $rdates[] = gmdate('Ymd\THis\Z', (int) $event->eventdate);
+                foreach (array_slice($eventtimes, 1) as $eventtime) {
+                    $rdates[] = gmdate('Ymd\THis\Z', $eventtime);
                 }
                 $update->recurrence = 'RRULE:FREQ=WEEKLY;COUNT=1'
                     . "\nRDATE:" . implode(',', $rdates);
@@ -481,7 +485,10 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
             null,
             'googlemeetid'
         );
-        $dbman->change_field_default($eventtable, $finaloccurrencekeyfield);
+        $eventcolumns = $DB->get_columns('googlemeet_events');
+        if (!empty($eventcolumns['occurrencekey']->has_default)) {
+            $dbman->change_field_default($eventtable, $finaloccurrencekeyfield);
+        }
 
         upgrade_mod_savepoint(true, 2026072610, 'googlemeet');
     }
@@ -582,6 +589,102 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
         }
 
         upgrade_mod_savepoint(true, 2026072612, 'googlemeet');
+    }
+
+    if ($oldversion < 2026072613) {
+        $table = new xmldb_table('googlemeet_diagnostics');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('googlemeetid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_field('operation', XMLDB_TYPE_CHAR, '32', null, XMLDB_NOTNULL);
+        $table->add_field('outcome', XMLDB_TYPE_CHAR, '16', null, XMLDB_NOTNULL);
+        $table->add_field('source', XMLDB_TYPE_CHAR, '16', null, XMLDB_NOTNULL);
+        $table->add_field('diagnosticcode', XMLDB_TYPE_CHAR, '100');
+        $table->add_field(
+            'timecreated',
+            XMLDB_TYPE_INTEGER,
+            '10',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            '0'
+        );
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key(
+            'googlemeetidfk',
+            XMLDB_KEY_FOREIGN,
+            ['googlemeetid'],
+            'googlemeet',
+            ['id']
+        );
+        $table->add_index('activitytime', XMLDB_INDEX_NOTUNIQUE, ['googlemeetid', 'timecreated']);
+        $table->add_index('operationoutcome', XMLDB_INDEX_NOTUNIQUE, ['operation', 'outcome']);
+        $table->add_index('timecreated', XMLDB_INDEX_NOTUNIQUE, ['timecreated']);
+
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_mod_savepoint(true, 2026072613, 'googlemeet');
+    }
+
+    if ($oldversion < 2026072614) {
+        // Calendar selection is resolved against each owner's live Google
+        // authorization. Existing `primary` aliases remain valid and are
+        // canonicalized to the exact primary Calendar ID on the next edit.
+        upgrade_mod_savepoint(true, 2026072614, 'googlemeet');
+    }
+
+    if ($oldversion < 2026072615) {
+        // Participant meeting links are now protected by a configurable
+        // server-side access window and a revalidating local join gateway.
+        upgrade_mod_savepoint(true, 2026072615, 'googlemeet');
+    }
+
+    if ($oldversion < 2026072616) {
+        // Recording mutations now use namespaced external functions with
+        // explicit, activity-scoped contracts. No database migration is needed.
+        upgrade_mod_savepoint(true, 2026072616, 'googlemeet');
+    }
+
+    if ($oldversion < 2026072617) {
+        // Activity synchronization and OAuth status now use testable Moodle
+        // renderables and Mustache contexts. No database migration is needed.
+        upgrade_mod_savepoint(true, 2026072617, 'googlemeet');
+    }
+
+    if ($oldversion < 2026072618) {
+        // The complete legacy upgrade chain is now covered by an explicit,
+        // machine-readable compatibility contract and migration tests. Retained
+        // legacy columns are intentionally not removed at this savepoint.
+        upgrade_mod_savepoint(true, 2026072618, 'googlemeet');
+    }
+
+    if ($oldversion < 2026072619) {
+        // CI now rehearses a normal Moodle CLI upgrade from the preserved
+        // v2.1.1 schema and verifies the resulting schema and representative
+        // legacy data before allowing the fresh-install PHPUnit job to run.
+        upgrade_mod_savepoint(true, 2026072619, 'googlemeet');
+    }
+
+    if ($oldversion < 2026072620) {
+        // Real Google Workspace acceptance now has a protected manual workflow,
+        // a CLI-only dedicated-tenant runner and a closed sanitized evidence
+        // schema. No database migration is required.
+        upgrade_mod_savepoint(true, 2026072620, 'googlemeet');
+    }
+
+    if ($oldversion < 2026072621) {
+        // Acceptance evidence is now grouped by closed runbook case, campaign
+        // and actual Moodle/PHP runtime, with an offline dual-runtime campaign
+        // verifier. No database migration is required.
+        upgrade_mod_savepoint(true, 2026072621, 'googlemeet');
+    }
+
+    if ($oldversion < 2026072622) {
+        // A read-only protected readiness gate now proves that the two
+        // disposable Moodle environments are isolated and correctly prepared
+        // before any live Google acceptance scenario. No migration is needed.
+        upgrade_mod_savepoint(true, 2026072622, 'googlemeet');
     }
 
     return true;

@@ -83,7 +83,7 @@ final class oauth_manager_issuer {
 final class oauth_manager_test extends \advanced_testcase {
 
     /**
-     * The authenticated client uses only Calendar events and enables refresh.
+     * The authenticated client uses only event and Calendar-list scopes and enables refresh.
      */
     public function test_builds_least_privilege_autorefresh_client(): void {
         $this->resetAfterTest();
@@ -111,6 +111,14 @@ final class oauth_manager_test extends \advanced_testcase {
 
         $this->assertSame($client, $result);
         $this->assertSame(oauth_manager::CALENDAR_SCOPE, $captured[1]);
+        $this->assertSame(
+            oauth_manager::CALENDAR_EVENTS_SCOPE . ' ' . oauth_manager::CALENDAR_LIST_SCOPE,
+            $captured[1]
+        );
+        $this->assertStringNotContainsString(
+            'https://www.googleapis.com/auth/calendar ',
+            $captured[1] . ' '
+        );
         $this->assertTrue($captured[2]);
         $this->assertSame(1, (int) $captured[0]->get_param('managed'));
         $this->assertSame(17, (int) $captured[0]->get_param('issuerid'));

@@ -35,6 +35,8 @@ final class reconcile_pending_meetings_test extends \advanced_testcase {
      * Cron queues separate owner-scoped ad hoc work without calling Google.
      */
     public function test_execute_queues_old_pending_and_stale_syncing_meetings(): void {
+        global $DB;
+
         $this->resetAfterTest();
         $owner = $this->getDataGenerator()->create_user();
         $course = $this->getDataGenerator()->create_course();
@@ -80,6 +82,16 @@ final class reconcile_pending_meetings_test extends \advanced_testcase {
         $this->assertEqualsCanonicalizing(
             [(int) $oldpending->id, (int) $stalesyncing->id],
             $meetingids
+        );
+        $diagnostics = $DB->get_records('googlemeet_diagnostics', [
+            'operation' => \mod_googlemeet\local\diagnostic_recorder::OPERATION_MEETING_SYNC,
+            'outcome' => \mod_googlemeet\local\diagnostic_recorder::OUTCOME_QUEUED,
+            'source' => \mod_googlemeet\local\diagnostic_recorder::SOURCE_CRON,
+        ]);
+        $this->assertCount(2, $diagnostics);
+        $this->assertEqualsCanonicalizing(
+            ['pending_reconciliation', 'stale_syncing_recovery'],
+            array_column($diagnostics, 'diagnosticcode')
         );
         $this->assertSame(get_string('reconcilependingtask', 'mod_googlemeet'), $task->get_name());
     }

@@ -19,6 +19,7 @@ namespace mod_googlemeet\courseformat;
 use core\output\action_link;
 use core_calendar\output\humandate;
 use mod_googlemeet\local\integration_mode;
+use mod_googlemeet\local\meeting_access_policy;
 use mod_googlemeet\local\sync_state;
 use PHPUnit\Framework\Attributes\CoversClass;
 
@@ -61,25 +62,98 @@ final class overview_test extends \advanced_testcase {
     }
 
     /**
-     * Ready meetings expose the validated external join action.
+     * Ready meetings expose only the local revalidating join action.
      */
     public function test_ready_meeting_exposes_join_action(): void {
-        global $DB;
+        global $DB, $OUTPUT;
 
         $this->resetAfterTest();
         $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->setUser($student);
+        $start = 1785405600;
         $meeting = $this->getDataGenerator()->get_plugin_generator('mod_googlemeet')->create_instance([
             'course' => $course->id,
             'integrationmode' => integration_mode::MANAGED,
             'syncstatus' => sync_state::READY,
             'meetinguri' => 'https://meet.google.com/abc-defg-hij',
+            'timestart' => $start,
+            'timeend' => $start + HOURSECS,
         ]);
         $cm = get_fast_modinfo($course)->get_cm($meeting->cmid);
 
-        $action = (new overview($cm, $DB))->get_actions_overview();
+        $action = (new overview($cm, $DB, $this->policy_at($start)))->get_actions_overview();
 
         $this->assertSame(get_string('overviewjoinmeeting', 'mod_googlemeet'), $action->get_value());
         $this->assertInstanceOf(action_link::class, $action->get_content());
+        $html = $OUTPUT->render($action->get_content());
+        $this->assertStringContainsString('/mod/googlemeet/join.php', $html);
+        $this->assertStringNotContainsString('meet.google.com', $html);
+    }
+
+    /**
+     * Participants outside the access window receive only the local activity view.
+     */
+    public function test_future_meeting_does_not_expose_join_action_to_participant(): void {
+        global $DB, $OUTPUT;
+
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->setUser($student);
+        $start = 1785405600;
+        $meeting = $this->getDataGenerator()->get_plugin_generator('mod_googlemeet')->create_instance([
+            'course' => $course->id,
+            'syncstatus' => sync_state::READY,
+            'meetinguri' => 'https://meet.google.com/abc-defg-hij',
+            'timestart' => $start,
+            'timeend' => $start + HOURSECS,
+        ]);
+        $cm = get_fast_modinfo($course)->get_cm($meeting->cmid);
+
+        $action = (new overview(
+            $cm,
+            $DB,
+            $this->policy_at($start - HOURSECS)
+        ))->get_actions_overview();
+
+        $this->assertSame(get_string('view'), $action->get_value());
+        $html = $OUTPUT->render($action->get_content());
+        $this->assertStringContainsString('/mod/googlemeet/view.php', $html);
+        $this->assertStringNotContainsString('/mod/googlemeet/join.php', $html);
+        $this->assertStringNotContainsString('meet.google.com', $html);
+    }
+
+    /**
+     * Explicit meeting managers may use the gateway outside the participant window.
+     */
+    public function test_manager_exposes_gateway_outside_participant_window(): void {
+        global $DB, $OUTPUT;
+
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $teacher = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $this->setUser($teacher);
+        $start = 1785405600;
+        $meeting = $this->getDataGenerator()->get_plugin_generator('mod_googlemeet')->create_instance([
+            'course' => $course->id,
+            'syncstatus' => sync_state::READY,
+            'meetinguri' => 'https://meet.google.com/abc-defg-hij',
+            'timestart' => $start,
+            'timeend' => $start + HOURSECS,
+        ]);
+        $cm = get_fast_modinfo($course)->get_cm($meeting->cmid);
+
+        $action = (new overview(
+            $cm,
+            $DB,
+            $this->policy_at($start - DAYSECS)
+        ))->get_actions_overview();
+
+        $this->assertSame(get_string('overviewjoinmeeting', 'mod_googlemeet'), $action->get_value());
+        $html = $OUTPUT->render($action->get_content());
+        $this->assertStringContainsString('/mod/googlemeet/join.php', $html);
+        $this->assertStringNotContainsString('meet.google.com', $html);
     }
 
     /**
@@ -90,6 +164,8 @@ final class overview_test extends \advanced_testcase {
 
         $this->resetAfterTest();
         $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->setUser($student);
         $meeting = $this->getDataGenerator()->get_plugin_generator('mod_googlemeet')->create_instance([
             'course' => $course->id,
             'integrationmode' => integration_mode::MANAGED,
@@ -102,5 +178,18 @@ final class overview_test extends \advanced_testcase {
 
         $this->assertSame(get_string('view'), $action->get_value());
         $this->assertInstanceOf(action_link::class, $action->get_content());
+    }
+
+    /**
+     * Builds a deterministic server-side policy.
+     *
+     * @param int $now Server timestamp.
+     * @return meeting_access_policy
+     */
+    private function policy_at(int $now): meeting_access_policy {
+        $clock = $this->createMock(\core\clock::class);
+        $clock->method('time')->willReturn($now);
+
+        return new meeting_access_policy($clock);
     }
 }

@@ -17,6 +17,7 @@
 namespace mod_googlemeet\courseformat;
 
 use cm_info;
+use context_module;
 use core\output\action_link;
 use core\output\local\properties\button;
 use core\output\local\properties\text_align;
@@ -24,6 +25,7 @@ use core\url;
 use core_calendar\output\humandate;
 use core_courseformat\activityoverviewbase;
 use core_courseformat\local\overview\overviewitem;
+use mod_googlemeet\local\meeting_access_policy;
 use mod_googlemeet\local\sync_state;
 
 /**
@@ -38,16 +40,22 @@ final class overview extends activityoverviewbase {
     /** @var \stdClass Activity record. */
     private \stdClass $meeting;
 
+    /** @var meeting_access_policy Canonical server-side join policy. */
+    private meeting_access_policy $accesspolicy;
+
     /**
      * @param cm_info $cm Course module information.
      * @param \moodle_database $db Moodle database dependency.
+     * @param meeting_access_policy|null $accesspolicy Explicit test dependency.
      */
     public function __construct(
         cm_info $cm,
-        \moodle_database $db
+        \moodle_database $db,
+        ?meeting_access_policy $accesspolicy = null
     ) {
         parent::__construct($cm);
         $this->meeting = $db->get_record('googlemeet', ['id' => $cm->instance], '*', MUST_EXIST);
+        $this->accesspolicy = $accesspolicy ?? new meeting_access_policy();
     }
 
     /**
@@ -70,14 +78,17 @@ final class overview extends activityoverviewbase {
      */
     #[\Override]
     public function get_actions_overview(): ?overviewitem {
-        $meetinguri = trim((string) ($this->meeting->meetinguri ?? ''));
-        $canjoin = $this->meeting->syncstatus === sync_state::READY
-            && $this->is_valid_meet_uri($meetinguri);
+        $context = context_module::instance((int) $this->cm->id);
+        $access = $this->accesspolicy->evaluate(
+            $this->meeting,
+            has_capability('mod/googlemeet:managemeeting', $context)
+        );
+        $canjoin = $access->can_join();
         $text = $canjoin
             ? get_string('overviewjoinmeeting', 'mod_googlemeet')
             : get_string('view');
         $target = $canjoin
-            ? new url($meetinguri)
+            ? new url('/mod/googlemeet/join.php', ['id' => $this->cm->id])
             : new url('/mod/googlemeet/view.php', ['id' => $this->cm->id]);
         $attributes = ['class' => button::BODY_OUTLINE->classes()];
         if ($canjoin) {
@@ -129,20 +140,6 @@ final class overview extends activityoverviewbase {
             name: get_string('overviewsyncstatus', 'mod_googlemeet'),
             value: $state,
             content: get_string('syncstatus' . $state, 'mod_googlemeet'),
-        );
-    }
-
-    /**
-     * Validates the join URI before exposing it as an external action.
-     *
-     * @param string $uri Candidate URI.
-     * @return bool
-     */
-    private function is_valid_meet_uri(string $uri): bool {
-        return (bool) preg_match(
-            '/^https:\/\/meet\.google\.com\/[-a-zA-Z0-9@:%._+~#=]{3}'
-                . '-[-a-zA-Z0-9@:%._+~#=]{4}-[-a-zA-Z0-9@:%._+~#=]{3}$/',
-            $uri
         );
     }
 }

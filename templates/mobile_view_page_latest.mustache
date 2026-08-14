@@ -22,8 +22,10 @@
   Example context (json):
   {
     "intro": "foo",
-    "url": "https://meet.google.com/vwe-vwee-vwe",
     "cmid": 3,
+    "canjoin": true,
+    "joinurl": "https://moodle.example/mod/googlemeet/join.php?id=3",
+    "availabilitymessage": null,
     "upcomingevent": {
       "hasupcomingevents": 1,
       "upcomingevents": [
@@ -46,6 +48,8 @@
           "createdtime": 1605140304,
           "duration": "1:00",
           "webviewlink": "https://drive.google.com/file/d/19jNAy_US0zzxxc8OPRWPp74i1msdff/view?usp=drivesdk",
+          "hasplayback": true,
+          "playbackunavailable": "Playback is unavailable.",
           "visible": 1,
           "createdtimeformatted": "Sunday, 23 April 2023, 1:47 PM"
         }
@@ -57,13 +61,27 @@
 <div>
   <core-course-module-description description="<% intro %>" component="mod_googlemeet" componentId="<% cmid %>"></core-course-module-description>
   <ion-list>
+    <%#canjoin%>
     <ion-item lines="full">
       <ion-label>
-        <ion-button id="googlemeet-mobile-join" class="ion-margin" expand="block" onclick="window.open('<% url %>', '_system');">
+        <ion-button
+          id="googlemeet-mobile-join"
+          class="ion-margin"
+          expand="block"
+          href="<% joinurl %>"
+          target="_blank"
+          rel="noopener"
+        >
           {{ 'plugin.mod_googlemeet.entertheroom' | translate }}
         </ion-button>
       </ion-label>
     </ion-item>
+    <%/canjoin%>
+    <%^canjoin%>
+    <ion-item lines="full">
+      <ion-label class="ion-text-wrap"><% availabilitymessage %></ion-label>
+    </ion-item>
+    <%/canjoin%>
   </ion-list>
 
   <%#upcomingevent.hasupcomingevents%>
@@ -129,10 +147,15 @@
           <ion-label>
             <p><%name%></p>
             <p><%createdtimeformatted%></p>
-            <ion-button onclick="window.open('<% webviewlink %>', '_system');">
-              <ion-icon slot="start" name="play"></ion-icon>
-              <%duration%>
-            </ion-button>
+            <%#hasplayback%>
+              <ion-button href="<%webviewlink%>" target="_blank" rel="noopener">
+                <ion-icon slot="start" name="play"></ion-icon>
+                <%duration%>
+              </ion-button>
+            <%/hasplayback%>
+            <%^hasplayback%>
+              <p><%playbackunavailable%></p>
+            <%/hasplayback%>
           </ion-label>
         </ion-item>
       <%/recording.recordings%>

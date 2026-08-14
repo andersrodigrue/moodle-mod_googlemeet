@@ -8,6 +8,33 @@ This fork preserves the original GPL history and is being modernized for Moodle
 5.2. See [the modernization foundation](docs/MODERNIZATION.md) for the current
 migration status and compatibility boundaries.
 
+The supported in-place source baseline is the preserved `v2.1.1` tag
+(`2023050101`). The [3.0 upgrade-readiness report](docs/UPGRADE-3.0.md) documents
+every savepoint, retained legacy field, data invariant, rollback boundary and
+production rehearsal required before a stable release.
+
+CI now gates the normal fresh-install suite behind a real upgrade rehearsal on
+PHP 8.3 and 8.4: it installs the preserved `v2.1.1` code and schema, seeds legacy
+records, overlays the development version, runs Moodle's CLI upgrader and
+verifies the migrated schema and data before PHPUnit.
+
+Real-provider release acceptance is defined separately in the
+[Google Workspace acceptance runbook](docs/GOOGLE-WORKSPACE-ACCEPTANCE.md).
+Its workflow is manual-only, restricted to the protected default branch and a
+dedicated self-hosted test tenant. OAuth grants remain in Moodle, Calendar
+mutations require explicit confirmation, and only schema-validated sanitized
+evidence may be uploaded. Each artifact is bound to a closed `GW-01` through
+`GW-14` case, campaign, source commit, Moodle 5.2 site and actual PHP 8.3/8.4
+runtime. An offline completion gate checks both runtime passes and the closed
+manual review without retaining provider identifiers or free-text observations.
+It never runs for `push` or `pull_request`.
+
+A separate protected readiness workflow checks both disposable Moodle sites
+without contacting Google. It requires independent database profiles, disabled
+outbound email, the exact dispatched plugin tree, distinct configured Google
+issuers and the four dedicated acceptance fixtures before any provider scenario
+can start.
+
 <div>
 <img src="https://ronefel.nimbusweb.me/box/attachment/8669013/93arpv0xye1v1fuw44bs/RFOdRT6UcpaK9F8a/screen1.png" alt="screen1.png" width="270" />
 <img src="https://ronefel.nimbusweb.me/box/attachment/8669016/no8bamexlmcaw3cbk22g/a4Fo3nWopQTWd7PJ/screen2.png" alt="screen2.png" width="270" />
@@ -37,8 +64,9 @@ production use yet.
 
 The development version separates the two per-teacher Google grants:
 
-- The Calendar issuer creates, updates and cancels the meeting event with the
-  `calendar.events` scope.
+- The Calendar issuer selects a writable calendar with the read-only
+  `calendar.calendarlist.readonly` scope and creates, updates and cancels the
+  meeting event with the `calendar.events` scope.
 - A second, dedicated recording issuer discovers generated recording metadata
   with only the `meetings.space.readonly` scope.
 
@@ -68,6 +96,14 @@ Managed meetings now support asynchronous creation, reconciliation and explicit
 owner-only cancellation. Retry, reconnect and cancel commands are submitted through
 session-protected POST actions; remote Calendar deletion is never triggered merely
 by deleting the Moodle activity.
+
+When creating a managed activity, the teacher explicitly selects from calendars
+where Google reports at least writer access. The selected Calendar ID is verified
+again while saving and becomes immutable once attached to the activity. Existing
+pre-release `primary` aliases are canonicalized to the exact primary Calendar ID
+on edit; a removed or downgraded calendar causes a visible failure and is never
+silently replaced by another destination. Teachers with an older Calendar grant
+must reconnect once to approve read-only access to their calendar list.
 
 The Moodle Privacy API declares Calendar ownership, recording authorization,
 legacy organizer data, reminder receipts, external Google processing and the
@@ -108,6 +144,41 @@ ordinary meeting edits do not repeat invitation email.
 Guest receipts and the invitation policy are excluded from backup and reset on
 restore. They are declared to Moodle's Privacy API and can be exported or
 deleted without making an unexpected remote Calendar request.
+
+Administrators with the dedicated diagnostic capability can inspect bounded
+operational transitions for Calendar synchronization, cancellation, guest
+reconciliation and recording discovery. This view stores only closed state and
+source values plus stable diagnostic codes: it excludes user IDs, OAuth data,
+attendee addresses, Google response bodies and free-form errors. Retention
+defaults to 30 days, is configurable within a fixed 7–180 day range and is
+enforced by a daily bounded purge task. Diagnostic rows are not copied by
+activity backup and restore.
+
+Participant entry is controlled by one server-side policy across the activity
+page, Moodle 5.2 Activities overview and Moodle app output. By default, the
+local join gateway opens 15 minutes before each occurrence and closes 60 minutes
+after it ends; administrators can select bounded alternatives in the activity
+module settings. Meeting managers may enter outside the participant window, but
+readiness and an exact Google Meet URI are still required. Presentation surfaces
+never receive the provider URI: they link to the local gateway, which evaluates
+the current server time again before redirecting. Recurring meetings apply the
+same interval to every occurrence, and recording visibility remains independent
+from live-meeting entry.
+
+Recording presentation now uses Moodle 5.2 namespaced external functions and a
+vanilla ES6 AMD module. Rename and visibility requests are explicit and
+idempotent, and all mutations derive their target from the authorized course
+module. Removing recordings deletes only Moodle's local references after a
+specific confirmation; it never deletes files from Google Drive. Stored
+playback links, including historical rows, are revalidated against their exact
+Drive file ID before reaching either the web page or Moodle app, and unsafe
+values fail closed.
+
+The activity page now composes Calendar state, recording discovery, OAuth
+notices and safe navigation through Moodle renderables and Mustache templates.
+All Calendar and recording lifecycle states have deterministic Boost
+presentation, command controls remain session-protected POST forms, and the
+meeting provider URI never enters the activity-actions template context.
 
 ## Security
 

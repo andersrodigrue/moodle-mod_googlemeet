@@ -38,7 +38,7 @@ timeouts or duplicate task delivery.
 
 ## Upgrade policy
 
-The upgrade from `2.1.2` is conservative:
+The upgrade from the inherited stable `2.1.1` tag is conservative:
 
 - old fields and records are not removed;
 - the existing `eventid` is retained but is explicitly treated as a legacy Calendar
@@ -110,8 +110,9 @@ The fourth structural slice provides the first production composition:
 - `oauth_manager` loads the issuer stored on the activity and refuses to use a token
   unless the ad hoc task is running as the stored meeting owner;
 - the issuer authorization endpoint must be HTTPS on `accounts.google.com`;
-- the managed integration requests only
-  `https://www.googleapis.com/auth/calendar.events`; Drive access is not added;
+- the managed integration requests only event management and read-only
+  Calendar-list access (`calendar.events` plus
+  `calendar.calendarlist.readonly`); Drive access is not added;
 - Moodle's user OAuth client is created with automatic refresh enabled, so access
   and refresh tokens remain in Moodle core's storage rather than plugin tables;
 - issuer-level account revocation delegates to Moodle core's scoped `log_out()`
@@ -419,11 +420,429 @@ The twelfth structural slice makes Calendar invitations opt-in and bounded:
   Calendar attendee processing without causing a remote mutation from a
   privacy callback.
 
+## Privacy-safe operational observability
+
+The thirteenth structural slice makes the asynchronous integration diagnosable
+without turning the diagnostic store into a copy of Google or OAuth data:
+
+- queueing, worker start and terminal outcomes are recorded for Calendar
+  synchronization, cancellation and recording discovery;
+- pending-conference reconciliation and stale-worker recovery are identified by
+  stable diagnostic codes, while guest reconciliation has its own operation;
+- operations, outcomes and execution sources use a closed vocabulary; diagnostic
+  codes accept only a compact lowercase identifier and reject free-form input;
+- the dedicated table contains no Moodle user ID, OAuth issuer, access or refresh
+  token, attendee email, remote response body or free-form exception message;
+- every stored transition emits a standard Moodle event whose `other` payload
+  contains the same bounded vocabulary. Moodle's normal event actor and logging
+  metadata remain governed by the site's logging and privacy policies;
+- a system-context capability, granted to the manager archetype by default,
+  protects the administrator view;
+- the view provides a 24-hour outcome summary plus filters by operation, outcome
+  and activity, and returns at most 200 recent rows;
+- diagnostics are never included in activity backup and are not cloned on
+  restore;
+- deleting an activity removes its diagnostic rows before the parent activity;
+- retention is restricted to 7, 14, 30, 60, 90 or 180 days, defaults to 30 days
+  and is enforced daily in batches of at most 5,000 rows;
+- automated tests cover the closed vocabulary, privacy boundary, Moodle event,
+  manager outcomes, cron origins, bounded queries, purge behavior, activity
+  deletion and backup/restore exclusion.
+
+This operational table is intentionally not declared as a user-data table by the
+plugin Privacy API because it has no user relationship. The Moodle event log is a
+core subsystem and continues to follow the site's configured log retention and
+privacy lifecycle.
+
+## Explicit writable Calendar selection
+
+The fourteenth structural slice removes the hard-coded `primary` Calendar
+assumption from new activities:
+
+- the owner-scoped OAuth grant combines event management with the narrow,
+  read-only `calendar.calendarlist.readonly` scope; it never requests the broad
+  `calendar` scope or changes the user's Calendar subscriptions;
+- `CalendarList.list` uses `minAccessRole=writer`, a maximum page size of 250,
+  opaque page-token encoding, loop detection and a hard ten-page boundary;
+- deleted, read-only and explicitly non-Meet-compatible calendars are excluded;
+- remote IDs and display labels are length- and control-character-validated, and
+  duplicate IDs or malformed responses fail closed;
+- a new managed activity presents the teacher's writable calendars, prefers the
+  actual primary entry only as a form default and persists the exact selected ID;
+- the selected ID is verified again during server-side persistence, closing the
+  gap between rendered form options and a forged or stale submission;
+- an attached managed activity retains its stored calendar even if another ID is
+  submitted. Calendar changes require a separate lifecycle operation so an
+  existing remote event cannot be silently orphaned;
+- non-owner coeditors neither load their own Google Calendar list nor receive the
+  stored Calendar ID in the form; they see only a generic attached state and the
+  existing owner-only validation remains authoritative;
+- pre-release records containing the API alias `primary` remain operable and are
+  canonicalized to the exact primary Calendar ID during the next authorized edit;
+- ownerless restored managed activities contain no guessed Calendar ID and must
+  select a writable destination when explicitly claimed;
+- if access is removed, the calendar disappears, or Google cannot verify the
+  selection, saving and synchronization retain the original ID and expose a safe
+  failure instead of switching to another calendar;
+- older grants without Calendar-list access require one explicit reconnect. The
+  new scope belongs only to the per-teacher Calendar integration and is not added
+  silently to Moodle's Google login;
+- Privacy API metadata now describes the Calendar identifiers, labels, access
+  roles and Meet support read temporarily for this selection;
+- automated tests cover pagination, access-role and Meet filtering, exact and
+  legacy-primary resolution, immutable existing selections, restore behavior,
+  least-privilege scopes and fail-closed malformed responses.
+
+## Server-side meeting availability
+
+The fifteenth structural slice makes meeting entry a server decision instead of
+a presentation convention:
+
+- one `meeting_access_policy` evaluates lifecycle readiness, exact Google Meet
+  URI syntax, the canonical schedule, the caller's management capability and the
+  Moodle server clock;
+- participant access defaults to 15 minutes before an occurrence through 60
+  minutes after its end. Administrators choose only from bounded early and late
+  values, and invalid stored settings fall back to those documented defaults;
+- the interval is half-open: its exact opening instant is allowed and its exact
+  closing instant is denied, eliminating ambiguous one-second behavior;
+- the canonical recurrence expander applies the window to every supported
+  occurrence. Between occurrences, the participant sees when the next window
+  opens; after the last occurrence, the participant receives a closed state;
+- malformed recurrence fails closed instead of falling back to the first event
+  or exposing the link. A meeting manager may bypass the time window, but cannot
+  bypass an unready lifecycle or an invalid stored URI;
+- unavailable decision objects never retain the provider URI, reducing the
+  chance that a later renderer accidentally leaks it;
+- a local `join.php` gateway requires login and `mod/googlemeet:view`, evaluates
+  the complete policy again at click time and redirects only when the current
+  decision permits entry;
+- the activity page, Moodle 5.2 Activities overview and both Moodle app template
+  generations point to that local gateway. None receives or renders the raw Meet
+  URI, including while access is open;
+- reminder messages continue to link to the local activity page and are tested
+  not to contain a Google Meet URI;
+- the Moodle app join action uses a normal link rather than interpolating the
+  provider URI into inline JavaScript;
+- entering through overview or mobile still records the standard activity-view
+  event and completion before leaving Moodle;
+- recordings are rendered independently from the live meeting window, so a
+  closed occurrence does not make already published course content disappear;
+- the access decision is transient and stores no new personal data, access log
+  or provider metadata. Existing Moodle logging remains governed by the site's
+  configured retention;
+- tests cover exact opening and closing boundaries, pre-window URI non-disclosure,
+  recurrence transitions, invalid schedule failure, bounded configuration,
+  explicit manager access, overview output, Moodle app output and reminder
+  content using a deterministic `core\clock`.
+
+## Activity-scoped recording presentation
+
+The sixteenth structural slice replaces the last legacy recording mutation and
+presentation boundary:
+
+- the global `mod_googlemeet_external` class and its old toggle-oriented
+  functions are removed from the alpha development line;
+- three Moodle 5.2 namespaced external classes expose explicit parameter and
+  return structures for rename, visibility and local-reference removal;
+- every endpoint resolves the activity from one course-module ID, validates the
+  module context and requires its dedicated write capability before reading a
+  recording;
+- a recording is selected by both local ID and authorized activity ID. Missing
+  and cross-activity values produce the same public error, preventing the API
+  from becoming an identifier-existence oracle;
+- visibility uses the requested boolean instead of toggling stored state, and
+  repeated rename, visibility and deletion requests are idempotent;
+- removing recordings receives no client-supplied activity instance ID. It
+  deletes only local `googlemeet_recordings` references in the authorized
+  activity and never calls Google Drive or deletes provider files;
+- the dedicated removal capability is marked with Moodle's `RISK_DATALOSS`
+  classification;
+- the confirmation text explains that files remain in Drive and that a later
+  discovery can restore their local references;
+- `core/ajax` supplies the session key for the AJAX service calls, while server
+  context and capability checks remain authoritative;
+- the recording table uses semantic buttons, accessible labels and a normal
+  `https` playback link with `target="_blank"` and `rel="noopener"`;
+- the embedded jQuery script, `javascript:void`, inline event handlers, mutable
+  HTML name insertion and loading overlay are replaced by one vanilla ES6 AMD
+  module;
+- recording names are written with `textContent`, server-trimmed, required and
+  limited to 255 characters;
+- historical database rows are revalidated before rendering against the exact
+  `https://drive.google.com/file/d/{fileid}/view` boundary. Unsafe, mismatched,
+  port-qualified or fragmented values fail closed and expose no raw URI;
+- both Moodle app template generations use the same validated data and normal
+  safe links rather than interpolating a URL into `window.open`;
+- automated tests cover authorized mutations, idempotency, capability failure,
+  cross-activity isolation, generic missing-item errors, local-only deletion,
+  unsafe historical links, escaped names, mutation-control visibility and
+  Moodle app output without inline handlers.
+
+This is an intentional pre-release external-function break in `3.0.0-dev`.
+No database schema change is required, but the plugin version advances so Moodle
+refreshes the service declarations and JavaScript caches.
+
+## Structured activity-page output
+
+The seventeenth structural slice separates activity presentation from
+authorization and command execution:
+
+- the recording section is a Moodle renderable whose template context contains
+  the validated recording rows, capability-derived controls, synchronization
+  state and owner-scoped OAuth presentation;
+- `locallib.php` now performs only the data and capability boundary, renders the
+  model and registers the JavaScript resources requested by that model. It no
+  longer constructs OAuth notices, status paragraphs, buttons or forms;
+- the five recording discovery states have deterministic labels, Boost badges
+  and progress behavior. Invalid stored values fail closed as `failed`;
+- issuer missing, another owner, connected grant, disconnected grant and OAuth
+  composition failure are distinct, testable states. Exception details never
+  enter the presentation model;
+- synchronization and disconnection remain session-protected POST forms aimed
+  at the existing `recordings.php` command boundary. The renderable does not
+  mutate OAuth, queue tasks or change ownership;
+- the owner may disconnect even when the dedicated issuer is no longer
+  configured, preserving a safe local recovery path;
+- read-only users receive the client-side table search enhancement, while any
+  role with edit or removal controls uses the stable, unpaginated mutation DOM;
+- the existing managed-Calendar `sync_status` renderable is now tested across
+  all nine lifecycle states, including invalid-state fallback and
+  cancellation-specific actions;
+- a separate activity-actions renderable exports only the local `join.php`
+  gateway. The provider Meet URI held by an allowed access decision never
+  reaches its template context;
+- managed Calendar detail links accept only trusted HTTPS origins without user
+  information, explicit ports or fragments. Legacy event identifiers are
+  encoded, and both link types remain capability-scoped;
+- normal links, semantic buttons, POST forms, heading hierarchy, visible focus
+  controls, status roles, alert roles, hidden loading text and `rel="noopener"`
+  provide a consistent Boost and assistive-technology boundary;
+- the command endpoints in `action.php` and `recordings.php`, server-side
+  access policy, external functions and OAuth storage are unchanged;
+- no new personal data or schema is introduced. The version increase refreshes
+  templates and cached presentation metadata.
+
+## Complete upgrade contract
+
+The eighteenth structural slice formalizes the complete upgrade path:
+
+- repository history identifies `v2.1.1` / `2023050101` as the last inherited
+  stable baseline, while retaining the guarded pre-`eventid` entry point;
+- one machine-readable compatibility contract lists every savepoint and every
+  legacy activity field that remains in the current schema;
+- current form persistence consumes that contract and strips all deprecated
+  schedule inputs before any insert or update;
+- the real `xmldb_googlemeet_upgrade()` function is exercised from the stable
+  baseline and from immediately before the oldest retained savepoint;
+- representative linked and manual activities, expanded occurrences, duplicate
+  occurrences, reminder receipts and a recording reference cross the complete
+  migration chain;
+- event-backed and field-only schedules acquire canonical timestamps, timezone
+  and recurrence without promoting the ambiguous old `eventid` into the modern
+  Calendar API identity;
+- duplicate legacy occurrence timestamps are removed before canonical `RDATE`
+  generation as well as before stable occurrence-key persistence;
+- a second upgrade replay must preserve occurrence and reminder receipt IDs;
+- every upgraded plugin table must have exactly the field set declared by the
+  fresh-install XMLDB schema, and every declared index must exist;
+- legacy schedule columns remain conversion-only, `creatoremail` remains bounded
+  to privacy lifecycle compatibility, and `eventid` remains a read-only legacy
+  link until explicit reconnection;
+- no physical legacy-column removal, Google request, OAuth mutation or task
+  execution occurs during this savepoint;
+- `docs/UPGRADE-3.0.md` records the data invariants, schema comparison, removal
+  gates, rehearsal procedure, rollback boundary and remaining release risks.
+
+## Real CLI migration rehearsal
+
+The nineteenth structural slice turns the migration contract into an
+environmental CI gate:
+
+- the checkout uses complete Git history and materializes the exact commit behind
+  the preserved `v2.1.1` tag in a separate worktree;
+- Moodle Plugin CI installs that unmodified legacy plugin into Moodle 5.2 on
+  PostgreSQL 16 under both PHP 8.3 and PHP 8.4;
+- a CLI-only seed script first proves that modern fields and tables do not exist,
+  then inserts two activities, three occurrence rows, two matching Moodle
+  Calendar events, three reminder receipts and three recording references
+  directly into the real four-table legacy schema;
+- the fixtures deliberately include duplicate occurrence timestamps, a
+  duplicate reminder recipient and a duplicate activity-scoped Drive file ID;
+- the current plugin tree is overlaid only after the old schema and data exist;
+- Moodle's normal non-interactive CLI upgrader executes the complete plugin
+  migration with alpha software explicitly allowed;
+- a CLI-only verifier confirms version, classification, canonical schedule,
+  recurrence, ownership, identifiers, deduplication, safe invitation defaults
+  and preservation of distinct records;
+- the verifier compares the upgraded database with every table, field and index
+  declared for a fresh installation, including rejection of extra plugin
+  tables;
+- neither fixture script is web-accessible, and neither composes an OAuth client,
+  sends mail, queues remote synchronization or calls Google;
+- the existing fresh-install and PHPUnit matrix now depends on both migration
+  jobs, so an upgrade regression blocks all later test jobs.
+
+No database column is added or removed in this recorte. Savepoint `2026072619`
+records the new release gate and keeps the compatibility contract aligned with
+`version.php`.
+
+## Protected Google Workspace acceptance
+
+The twentieth structural slice turns real-provider verification into a bounded,
+reviewable release gate:
+
+- `.github/workflows/google-workspace-acceptance.yml` has only a
+  `workflow_dispatch` trigger and refuses to run outside the repository's default
+  branch;
+- the job requires the protected `google-workspace-acceptance` Environment and a
+  dedicated self-hosted Linux runner carrying the same label;
+- the two referenced GitHub-maintained actions are pinned to reviewed immutable
+  commit hashes rather than mutable major-version tags;
+- no OAuth grant, Google password, Moodle credential or client secret is accepted
+  as an input or stored as a GitHub secret. Owner grants remain in Moodle core's
+  OAuth storage;
+- the Environment supplies only the absolute `MOODLE_CONFIG` path for the
+  disposable tenant, after required reviewer approval;
+- the workflow validates every interpolated input as a closed identifier or
+  bounded integer before using it in the shell;
+- the exact protected-branch source is installed while the disposable Moodle site
+  is in maintenance mode and Moodle's normal CLI upgrader runs before acceptance;
+- the CLI fixture requires an explicit config switch, an `[ACCEPTANCE]` activity
+  marker, managed mode, a canonical schedule, exact owner context, a persisted
+  issuer and a selected Calendar ID;
+- `snapshot` reads local state only, while `preflight` exercises owner OAuth
+  refresh, Calendar-list access and exact writable-Calendar resolution;
+- `synchronise` and `cancel` require an additional fixed acknowledgement before
+  they can create, update or delete a real Calendar resource;
+- bounded polling reconciles a pending Meet conference without issuing a second
+  conference request;
+- recording discovery uses the dedicated owner issuer and production Meet REST
+  composition only after the meeting is ready;
+- expected guest and minimum recording counts are optional bounded assertions;
+- the executor invokes the same production managers used by owner-scoped ad hoc
+  tasks but processes directly so the acceptance run does not leave duplicate
+  queued work;
+- a separate matrix case still validates the normal form-to-ad-hoc-task path with
+  cron and Moodle task logs;
+- all manager output is buffered and discarded; exceptions become closed local
+  codes rather than copying messages or response data;
+- the JSON evidence schema contains only local state, counts, presence booleans,
+  version, commit, scenario, time and closed check results;
+- a second dependency-free validator rejects unexpected fields, URLs, email-like
+  strings, bearer tokens, common Google access-token prefixes, token/secret names
+  and forbidden remote identifier keys before artifact upload;
+- sanitized artifacts expire after seven days, and a failed scenario is uploaded
+  only after its evidence passes the same secret boundary;
+- the runbook covers consent, refresh, writable calendars, one-off and recurring
+  creation, idempotency, asynchronous completion, attendee changes, cancellation,
+  recording discovery, revocation and the normal Moodle queue;
+- 429, 412 and 5xx behavior remains deterministically injected in PHPUnit. The
+  runbook explicitly forbids forcing quota exhaustion against Google's real API;
+- the tenant, Google Cloud project, users, calendars, recordings and runner are
+  dedicated and disposable, with documented cleanup after every cycle.
+
+No live credential is available to normal CI, and this recorte does not claim a
+successful Google Workspace run. It provides the controlled mechanism and
+evidence contract required to perform that release gate. No database schema is
+changed; savepoint `2026072620` records the new operational contract.
+
+## Dual-runtime acceptance campaigns
+
+The twenty-first structural slice closes the accounting gap between isolated
+provider runs and a complete release decision:
+
+- each dispatch carries a short sanitized campaign slug, a closed runbook case
+  from `GW-01` through `GW-14`, and a selected PHP 8.3 or PHP 8.4 runtime;
+- the case/scenario relationship is enforced independently by the workflow, the
+  Moodle acceptance contract and the dependency-free evidence validator;
+- dedicated runners have both the common `google-workspace-acceptance` label and
+  a runtime-specific `php-8.3` or `php-8.4` label;
+- the workflow compares the selected PHP series with the executing binary before
+  installing or upgrading the disposable site;
+- evidence schema 2 derives and retains the actual PHP major/minor series,
+  Moodle branch and Moodle version alongside campaign and case identity;
+- campaign IDs are bounded lowercase slugs and reject credential-related words,
+  consecutive separators, URLs, email addresses and secret-like material;
+- artifact names include campaign, runtime, case and scenario, while the JSON
+  continues to omit Calendar IDs, event IDs, Meet URIs, recording links, OAuth
+  values and provider response bodies;
+- `verify_campaign.php` consumes downloaded evidence without network access,
+  rejects duplicate documents and requires one source commit, plugin version,
+  campaign and Moodle 5.2 branch;
+- the gate requires both PHP runtimes, repeated evidence for idempotency,
+  recurrence edits and attendee changes, cancellation followed by snapshot,
+  asynchronous polling, and failed/recovered Calendar and recording revocation;
+- deterministic CI remains the authoritative GW-10 rate-limit evidence so the
+  live campaign never manufactures quota exhaustion;
+- a closed manual-review document records only `passed`, `failed` or `pending`
+  for every case/runtime. It has no free-text or reviewer-identity field and
+  cannot carry provider observations;
+- the completion command fails until all automated requirements and all manual
+  reviews pass on both runtimes;
+- the normal PHP 8.3/8.4 CI matrix runs a hermetic positive/negative self-test
+  that accepts a complete synthetic campaign and rejects the same campaign after
+  one required artifact is removed.
+
+No Google or GitHub API is called by the campaign verifier. This recorte still
+does not claim a successful provider run: it makes that future claim
+machine-checkable and prevents a partial, wrong-runtime or mixed-commit set of
+artifacts from being treated as a completed campaign. No database schema is
+changed; savepoint `2026072621` records the updated operational contract.
+
+## Protected dual-environment readiness
+
+The twenty-second structural slice makes the infrastructure prerequisite
+machine-checkable before any provider operation:
+
+- `.github/workflows/google-workspace-readiness.yml` is manual-only, restricted
+  to the protected default branch and the reviewed
+  `google-workspace-acceptance` Environment;
+- its matrix requires one dedicated runner labelled `php-8.3` and another
+  labelled `php-8.4`, then verifies each label against the executing binary;
+- checkout is pinned to the dispatch event's exact `GITHUB_SHA`, and both GitHub
+  actions remain pinned to reviewed immutable commit hashes;
+- `check_environment.php` reads local Moodle configuration and database state
+  without composing OAuth clients, sending mail, changing data or calling
+  Google;
+- each site must declare a closed `php83` or `php84` profile in `config.php` and
+  store the same profile in its own Moodle database;
+- because the database profiles must differ, two runtime frontends backed by one
+  shared database cannot both pass;
+- outbound Moodle email must be disabled and the disposable site must use HTTPS
+  and Moodle branch `502`;
+- a recursive SHA-256 manifest verifies that the installed plugin tree is
+  byte-for-byte equivalent to the dispatched source, excluding only `.git`;
+- Calendar and recording issuers must both be enabled, configured for Google's
+  HTTPS authorization host and use different issuer identities;
+- exact `[ACCEPTANCE] Single`, `Recurring`, `Guests` and `Recording` fixtures
+  must satisfy their closed ownership, schedule, guest and recording
+  prerequisites;
+- readiness evidence contains only versions, runtime, commit, a closed profile,
+  check results and a stable failure code;
+- a dependency-free validator rejects unexpected fields, URLs, email addresses,
+  token-like material and local or provider identifier fields;
+- the ordinary PHP 8.3/8.4 CI validates a synthetic readiness document;
+- the live acceptance workflow repeats the readiness check after installing and
+  upgrading the exact dispatched source, so no scenario can bypass it.
+
+This recorte does not provision a cloud tenant or claim a successful provider
+run. It converts the previously external readiness assumptions into a failing
+gate that can be satisfied only by the two dedicated environments. No database
+schema is changed; savepoint `2026072622` records the operational contract.
+
 ## Next structural slice
 
-The next slice should add privacy-safe operational observability for the managed
-pipeline. Structured Moodle events and an administrator-facing diagnostic view
-should cover queueing, synchronization, cancellation, guest reconciliation and
-recording discovery without exposing OAuth tokens, raw attendee addresses or
-Google response bodies. Retention boundaries and automated tests should be part
-of that design before the alpha line is considered for wider testing.
+The next slice now has an explicit external entry condition: provision the
+independent Moodle 5.2/PHP 8.3 and PHP 8.4 sites, assign their config/database
+profiles, install the exact protected commit, create the four dedicated
+fixtures, configure the two Google issuers and make both readiness matrix jobs
+green. Then execute one campaign against the dedicated Google Workspace tenant.
+Every case should retain only the sanitized evidence defined by the runbook;
+provider-side observations must be reduced to the closed manual-review status
+without copying identifiers, URLs or log excerpts. Any discrepancy should
+become a focused code/test fix and require a fresh campaign for the affected
+commit. After the dual-runtime campaign gate is green, the development line can
+enter API freeze and beta release preparation; physical removal of retained
+legacy columns remains deferred until its documented compatibility windows
+close.

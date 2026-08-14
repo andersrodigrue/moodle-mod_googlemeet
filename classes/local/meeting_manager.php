@@ -23,6 +23,7 @@ use mod_googlemeet\api\calendar_configuration_exception;
 use mod_googlemeet\api\calendar_event_result;
 use mod_googlemeet\api\calendar_guest_limit_exception;
 use mod_googlemeet\api\calendar_response_exception;
+use mod_googlemeet\api\calendar_transport_exception;
 use mod_googlemeet\task\synchronise_meeting;
 
 /**
@@ -77,6 +78,9 @@ final class meeting_manager {
     /** @var calendar_guest_repository Managed guest snapshot repository. */
     private calendar_guest_repository $guestrepository;
 
+    /** @var diagnostic_recorder Privacy-safe operational recorder. */
+    private diagnostic_recorder $diagnostics;
+
     /**
      * @param sync_repository|null $repository Synchronization repository.
      * @param meeting_lock|null $lock Per-activity lock coordinator.
@@ -84,6 +88,7 @@ final class meeting_manager {
      * @param calendar_adapter_provider|null $calendaradapterprovider Production adapter provider.
      * @param calendar_guest_resolver|null $guestresolver Course participant resolver.
      * @param calendar_guest_repository|null $guestrepository Managed guest snapshot repository.
+     * @param diagnostic_recorder|null $diagnostics Operational recorder.
      */
     public function __construct(
         ?sync_repository $repository = null,
@@ -91,7 +96,8 @@ final class meeting_manager {
         ?calendar_adapter $calendaradapter = null,
         ?calendar_adapter_provider $calendaradapterprovider = null,
         ?calendar_guest_resolver $guestresolver = null,
-        ?calendar_guest_repository $guestrepository = null
+        ?calendar_guest_repository $guestrepository = null,
+        ?diagnostic_recorder $diagnostics = null
     ) {
         $this->repository = $repository ?? new sync_repository();
         $this->lock = $lock ?? new meeting_lock();
@@ -99,6 +105,7 @@ final class meeting_manager {
         $this->calendaradapterprovider = $calendaradapterprovider;
         $this->guestresolver = $guestresolver ?? new calendar_guest_resolver();
         $this->guestrepository = $guestrepository ?? new calendar_guest_repository();
+        $this->diagnostics = $diagnostics ?? new diagnostic_recorder();
     }
 
     /**
@@ -106,10 +113,15 @@ final class meeting_manager {
      *
      * @param int $googlemeetid Activity instance ID.
      * @param int|null $userid User the task should run as, or null to use the stored owner.
+     * @param string $source Diagnostic execution source.
      * @return bool True when a new task was queued, false when an identical task already exists.
      */
-    public function queue(int $googlemeetid, ?int $userid = null): bool {
-        return $this->lock->with_lock($googlemeetid, function () use ($googlemeetid, $userid): bool {
+    public function queue(
+        int $googlemeetid,
+        ?int $userid = null,
+        string $source = diagnostic_recorder::SOURCE_USER
+    ): bool {
+        return $this->lock->with_lock($googlemeetid, function () use ($googlemeetid, $userid, $source): bool {
             $meeting = $this->repository->get($googlemeetid);
             $transitionrequired = !in_array(
                 $meeting->syncstatus,
@@ -129,6 +141,14 @@ final class meeting_manager {
             if ($queued && $transitionrequired) {
                 $this->repository->transition($googlemeetid, sync_state::QUEUED);
             }
+            if ($queued) {
+                $this->diagnostics->record(
+                    $googlemeetid,
+                    diagnostic_recorder::OPERATION_MEETING_SYNC,
+                    diagnostic_recorder::OUTCOME_QUEUED,
+                    $source
+                );
+            }
 
             return $queued;
         });
@@ -139,10 +159,15 @@ final class meeting_manager {
      *
      * @param int $googlemeetid Activity instance ID.
      * @param int|null $userid User the task should run as, or null to use the stored owner.
+     * @param string $source Diagnostic execution source.
      * @return bool True when a new task was queued.
      */
-    public function cancel(int $googlemeetid, ?int $userid = null): bool {
-        return $this->lock->with_lock($googlemeetid, function () use ($googlemeetid, $userid): bool {
+    public function cancel(
+        int $googlemeetid,
+        ?int $userid = null,
+        string $source = diagnostic_recorder::SOURCE_USER
+    ): bool {
+        return $this->lock->with_lock($googlemeetid, function () use ($googlemeetid, $userid, $source): bool {
             $meeting = $this->repository->get($googlemeetid);
             if ($meeting->integrationmode !== integration_mode::MANAGED) {
                 throw new \coding_exception('Only managed meetings can be cancelled remotely.');
@@ -152,6 +177,13 @@ final class meeting_manager {
             }
             if ($meeting->syncstatus === sync_state::DRAFT && empty($meeting->googleeventid)) {
                 $this->repository->transition($googlemeetid, sync_state::CANCELLED);
+                $this->diagnostics->record(
+                    $googlemeetid,
+                    diagnostic_recorder::OPERATION_MEETING_CANCEL,
+                    diagnostic_recorder::OUTCOME_SUCCEEDED,
+                    $source,
+                    'remote_event_absent'
+                );
                 return false;
             }
 
@@ -165,7 +197,17 @@ final class meeting_manager {
                 throw new \coding_exception('A managed meeting owner is required for cancellation.');
             }
 
-            return synchronise_meeting::enqueue($googlemeetid, $taskuserid);
+            $queued = synchronise_meeting::enqueue($googlemeetid, $taskuserid);
+            if ($queued) {
+                $this->diagnostics->record(
+                    $googlemeetid,
+                    diagnostic_recorder::OPERATION_MEETING_CANCEL,
+                    diagnostic_recorder::OUTCOME_QUEUED,
+                    $source
+                );
+            }
+
+            return $queued;
         });
     }
 
@@ -196,11 +238,23 @@ final class meeting_manager {
 
             if ($meeting->syncstatus === sync_state::CANCELLING) {
                 $meeting = $this->repository->start_cancellation_attempt($googlemeetid);
+                $this->diagnostics->record(
+                    $googlemeetid,
+                    diagnostic_recorder::OPERATION_MEETING_CANCEL,
+                    diagnostic_recorder::OUTCOME_STARTED,
+                    diagnostic_recorder::SOURCE_ADHOC
+                );
                 $this->process_cancellation($meeting);
                 return;
             }
 
             $meeting = $this->repository->start_attempt($googlemeetid);
+            $this->diagnostics->record(
+                $googlemeetid,
+                diagnostic_recorder::OPERATION_MEETING_SYNC,
+                diagnostic_recorder::OUTCOME_STARTED,
+                diagnostic_recorder::SOURCE_ADHOC
+            );
             $this->process_attempt($meeting);
         });
     }
@@ -220,6 +274,11 @@ final class meeting_manager {
                 self::ERROR_INVALID_MODE,
                 get_string('syncinvalidintegrationmode', 'mod_googlemeet')
             );
+            $this->record_cancellation_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_FAILED,
+                self::ERROR_INVALID_MODE
+            );
             return;
         }
         if ($this->calendaradapter === null && $this->calendaradapterprovider === null) {
@@ -227,6 +286,11 @@ final class meeting_manager {
                 (int) $meeting->id,
                 self::ERROR_ADAPTER_UNAVAILABLE,
                 get_string('syncadapterunavailable', 'mod_googlemeet')
+            );
+            $this->record_cancellation_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_FAILED,
+                self::ERROR_ADAPTER_UNAVAILABLE
             );
             return;
         }
@@ -241,12 +305,22 @@ final class meeting_manager {
                 self::ERROR_AUTHORIZATION_REQUIRED,
                 get_string('syncoauthrequired', 'mod_googlemeet')
             );
+            $this->record_cancellation_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_BLOCKED,
+                self::ERROR_AUTHORIZATION_REQUIRED
+            );
             return;
         } catch (calendar_api_exception $e) {
             $this->repository->mark_cancellation_blocked(
                 (int) $meeting->id,
                 $e->error_code(),
                 get_string('synccalendarcancelapifailed', 'mod_googlemeet')
+            );
+            $this->record_cancellation_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_BLOCKED,
+                $e->error_code()
             );
             return;
         } catch (calendar_configuration_exception $e) {
@@ -255,6 +329,11 @@ final class meeting_manager {
                 self::ERROR_CALENDAR_CONFIGURATION,
                 get_string('synccalendarconfigurationinvalid', 'mod_googlemeet')
             );
+            $this->record_cancellation_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_BLOCKED,
+                self::ERROR_CALENDAR_CONFIGURATION
+            );
             return;
         } catch (calendar_response_exception $e) {
             $this->repository->mark_cancellation_blocked(
@@ -262,10 +341,23 @@ final class meeting_manager {
                 self::ERROR_CALENDAR_RESPONSE,
                 get_string('synccalendarresponseinvalid', 'mod_googlemeet')
             );
+            $this->record_cancellation_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_BLOCKED,
+                self::ERROR_CALENDAR_RESPONSE
+            );
             return;
+        } catch (calendar_transport_exception $e) {
+            $this->record_cancellation_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_RETRYING,
+                'calendar_transport_failure'
+            );
+            throw $e;
         }
 
         $this->repository->mark_cancelled((int) $meeting->id);
+        $this->record_cancellation_outcome($meeting, diagnostic_recorder::OUTCOME_SUCCEEDED);
         mtrace(get_string('syncmanagedcancelled', 'mod_googlemeet', $meeting->id));
     }
 
@@ -277,6 +369,7 @@ final class meeting_manager {
     private function process_attempt(\stdClass $meeting): void {
         if ($meeting->integrationmode === integration_mode::MANUAL) {
             $this->repository->transition((int) $meeting->id, sync_state::READY);
+            $this->record_sync_outcome($meeting, diagnostic_recorder::OUTCOME_SUCCEEDED, 'manual_mode');
             mtrace(get_string('syncmanualready', 'mod_googlemeet', $meeting->id));
             return;
         }
@@ -286,6 +379,11 @@ final class meeting_manager {
                 (int) $meeting->id,
                 self::ERROR_RECONNECT_REQUIRED,
                 get_string('syncreconnectrequired', 'mod_googlemeet')
+            );
+            $this->record_sync_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_BLOCKED,
+                self::ERROR_RECONNECT_REQUIRED
             );
             mtrace(get_string('synclegacydisconnected', 'mod_googlemeet', $meeting->id));
             return;
@@ -301,6 +399,7 @@ final class meeting_manager {
             self::ERROR_INVALID_MODE,
             get_string('syncinvalidintegrationmode', 'mod_googlemeet')
         );
+        $this->record_sync_outcome($meeting, diagnostic_recorder::OUTCOME_FAILED, self::ERROR_INVALID_MODE);
     }
 
     /**
@@ -316,6 +415,11 @@ final class meeting_manager {
                 (int) $meeting->id,
                 self::ERROR_ADAPTER_UNAVAILABLE,
                 get_string('syncadapterunavailable', 'mod_googlemeet')
+            );
+            $this->record_sync_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_FAILED,
+                self::ERROR_ADAPTER_UNAVAILABLE
             );
             mtrace(get_string('syncmanageddeferred', 'mod_googlemeet', $meeting->id));
             return;
@@ -335,6 +439,11 @@ final class meeting_manager {
                 self::ERROR_AUTHORIZATION_REQUIRED,
                 get_string('syncoauthrequired', 'mod_googlemeet')
             );
+            $this->record_sync_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_BLOCKED,
+                self::ERROR_AUTHORIZATION_REQUIRED
+            );
             mtrace(get_string('syncmanageddisconnected', 'mod_googlemeet', $meeting->id));
             return;
         } catch (calendar_api_exception $e) {
@@ -343,6 +452,7 @@ final class meeting_manager {
                 $e->error_code(),
                 get_string('synccalendarapifailed', 'mod_googlemeet')
             );
+            $this->record_sync_outcome($meeting, diagnostic_recorder::OUTCOME_FAILED, $e->error_code());
             mtrace(get_string('syncmanagedapifailed', 'mod_googlemeet', $meeting->id));
             return;
         } catch (calendar_guest_limit_exception $e) {
@@ -350,6 +460,11 @@ final class meeting_manager {
                 (int) $meeting->id,
                 self::ERROR_GUEST_LIMIT,
                 get_string('syncguestlimitexceeded', 'mod_googlemeet', calendar_guest_resolver::MAX_ATTENDEES)
+            );
+            $this->record_sync_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_FAILED,
+                self::ERROR_GUEST_LIMIT
             );
             mtrace(get_string('syncmanagedguestlimitfailed', 'mod_googlemeet', $meeting->id));
             return;
@@ -359,6 +474,11 @@ final class meeting_manager {
                 self::ERROR_CALENDAR_CONFIGURATION,
                 get_string('synccalendarconfigurationinvalid', 'mod_googlemeet')
             );
+            $this->record_sync_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_FAILED,
+                self::ERROR_CALENDAR_CONFIGURATION
+            );
             mtrace(get_string('syncmanagedconfigurationfailed', 'mod_googlemeet', $meeting->id));
             return;
         } catch (calendar_response_exception $e) {
@@ -367,8 +487,20 @@ final class meeting_manager {
                 self::ERROR_CALENDAR_RESPONSE,
                 get_string('synccalendarresponseinvalid', 'mod_googlemeet')
             );
+            $this->record_sync_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_FAILED,
+                self::ERROR_CALENDAR_RESPONSE
+            );
             mtrace(get_string('syncmanagedresponsefailed', 'mod_googlemeet', $meeting->id));
             return;
+        } catch (calendar_transport_exception $e) {
+            $this->record_sync_outcome(
+                $meeting,
+                diagnostic_recorder::OUTCOME_RETRYING,
+                'calendar_transport_failure'
+            );
+            throw $e;
         }
 
         $transaction = $DB->start_delegated_transaction();
@@ -377,11 +509,58 @@ final class meeting_manager {
             $this->guestrepository->record_synchronised((int) $meeting->id, $guests);
         }
         $transaction->allow_commit();
+        $outcome = match ($result->status()) {
+            calendar_event_result::PENDING => diagnostic_recorder::OUTCOME_PENDING,
+            calendar_event_result::SUCCESS => diagnostic_recorder::OUTCOME_SUCCEEDED,
+            calendar_event_result::FAILURE => diagnostic_recorder::OUTCOME_FAILED,
+        };
+        $code = $result->status() === calendar_event_result::FAILURE
+            ? 'conference_creation_failed'
+            : null;
+        $this->record_sync_outcome($meeting, $outcome, $code);
         $messagekey = match ($result->status()) {
             calendar_event_result::PENDING => 'syncmanagedpending',
             calendar_event_result::SUCCESS => 'syncmanagedready',
             calendar_event_result::FAILURE => 'syncmanagedfailed',
         };
         mtrace(get_string($messagekey, 'mod_googlemeet', $meeting->id));
+    }
+
+    /**
+     * Records one meeting synchronization outcome.
+     *
+     * @param \stdClass $meeting Activity.
+     * @param string $outcome Closed outcome.
+     * @param string|null $code Stable code.
+     */
+    private function record_sync_outcome(\stdClass $meeting, string $outcome, ?string $code = null): void {
+        $this->diagnostics->record(
+            (int) $meeting->id,
+            diagnostic_recorder::OPERATION_MEETING_SYNC,
+            $outcome,
+            diagnostic_recorder::SOURCE_ADHOC,
+            $code
+        );
+    }
+
+    /**
+     * Records one Calendar cancellation outcome.
+     *
+     * @param \stdClass $meeting Activity.
+     * @param string $outcome Closed outcome.
+     * @param string|null $code Stable code.
+     */
+    private function record_cancellation_outcome(
+        \stdClass $meeting,
+        string $outcome,
+        ?string $code = null
+    ): void {
+        $this->diagnostics->record(
+            (int) $meeting->id,
+            diagnostic_recorder::OPERATION_MEETING_CANCEL,
+            $outcome,
+            diagnostic_recorder::SOURCE_ADHOC,
+            $code
+        );
     }
 }

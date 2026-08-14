@@ -40,7 +40,9 @@ use mod_googlemeet\local\privacy_lifecycle;
  *
  * Shared activity configuration and recording references are course content,
  * not owner-specific records. User deletion detaches authorization ownership
- * and operational diagnostics without deleting those shared references.
+ * and owner-scoped synchronization fields without deleting those shared
+ * references. The separate operational diagnostic table contains no user
+ * identifier or free-form content and is governed by bounded site retention.
  */
 class provider implements
         \core_privacy\local\metadata\provider,
@@ -123,6 +125,7 @@ class provider implements
             'google_calendar',
             [
                 'authorizedaccount' => 'privacy:metadata:google_calendar:authorizedaccount',
+                'calendarlist' => 'privacy:metadata:google_calendar:calendarlist',
                 'summary' => 'privacy:metadata:google_calendar:summary',
                 'schedule' => 'privacy:metadata:google_calendar:schedule',
                 'timezone' => 'privacy:metadata:google_calendar:timezone',

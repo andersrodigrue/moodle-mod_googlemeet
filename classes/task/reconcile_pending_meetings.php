@@ -16,7 +16,9 @@
 
 namespace mod_googlemeet\task;
 
+use mod_googlemeet\local\diagnostic_recorder;
 use mod_googlemeet\local\sync_repository;
+use mod_googlemeet\local\sync_state;
 
 /**
  * Queues owner-scoped reconciliation for pending or stale managed meetings.
@@ -60,9 +62,19 @@ final class reconcile_pending_meetings extends \core\task\scheduled_task {
         );
 
         $queued = 0;
+        $diagnostics = new diagnostic_recorder();
         foreach ($candidates as $meeting) {
             if (synchronise_meeting::enqueue((int) $meeting->id, (int) $meeting->owneruserid)) {
                 $queued++;
+                $diagnostics->record(
+                    (int) $meeting->id,
+                    diagnostic_recorder::OPERATION_MEETING_SYNC,
+                    diagnostic_recorder::OUTCOME_QUEUED,
+                    diagnostic_recorder::SOURCE_CRON,
+                    $meeting->syncstatus === sync_state::PENDING
+                        ? 'pending_reconciliation'
+                        : 'stale_syncing_recovery'
+                );
             }
         }
 

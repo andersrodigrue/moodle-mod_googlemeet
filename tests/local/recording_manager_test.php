@@ -76,6 +76,8 @@ final class recording_manager_test extends \advanced_testcase {
      * Claiming queues one owner-scoped task and suppresses its duplicate.
      */
     public function test_claim_and_queue_is_owner_scoped_and_deduplicated(): void {
+        global $DB;
+
         $this->resetAfterTest();
         $owner = $this->getDataGenerator()->create_user();
         $meeting = $this->create_meeting();
@@ -94,6 +96,12 @@ final class recording_manager_test extends \advanced_testcase {
         $task = reset($tasks);
         $this->assertSame((int) $owner->id, (int) $task->get_userid());
         $this->assertSame((int) $meeting->id, (int) $task->get_custom_data()->googlemeetid);
+        $this->assertSame(1, $DB->count_records('googlemeet_diagnostics', [
+            'googlemeetid' => $meeting->id,
+            'operation' => diagnostic_recorder::OPERATION_RECORDING_DISCOVERY,
+            'outcome' => diagnostic_recorder::OUTCOME_QUEUED,
+            'source' => diagnostic_recorder::SOURCE_USER,
+        ]));
     }
 
     /**
@@ -120,6 +128,8 @@ final class recording_manager_test extends \advanced_testcase {
      * A complete empty snapshot is successful and does not imply deletion.
      */
     public function test_process_marks_complete_snapshot_ready(): void {
+        global $DB;
+
         $this->resetAfterTest();
         $meeting = $this->create_meeting([
             'recordingsyncstatus' => recording_sync_state::QUEUED,
@@ -141,6 +151,20 @@ final class recording_manager_test extends \advanced_testcase {
         $this->assertSame(recording_sync_state::READY, $updated->recordingsyncstatus);
         $this->assertSame(1, (int) $updated->recordingsyncattempts);
         $this->assertGreaterThan(0, (int) $updated->lastsync);
+
+        $diagnostics = array_values($DB->get_records(
+            'googlemeet_diagnostics',
+            [
+                'googlemeetid' => $meeting->id,
+                'operation' => diagnostic_recorder::OPERATION_RECORDING_DISCOVERY,
+            ],
+            'id ASC'
+        ));
+        $this->assertSame(
+            [diagnostic_recorder::OUTCOME_STARTED, diagnostic_recorder::OUTCOME_SUCCEEDED],
+            array_column($diagnostics, 'outcome')
+        );
+        $this->assertSame('no_new_artifacts', $diagnostics[1]->diagnosticcode);
     }
 
     /**

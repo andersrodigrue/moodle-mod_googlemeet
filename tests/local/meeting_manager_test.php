@@ -159,6 +159,8 @@ final class meeting_manager_test extends \advanced_testcase {
      * A managed cancellation is queued as the owner and deletes the remote event.
      */
     public function test_managed_cancellation_is_owner_scoped_and_settles(): void {
+        global $DB;
+
         $this->resetAfterTest();
 
         $owner = $this->getDataGenerator()->create_user();
@@ -194,6 +196,28 @@ final class meeting_manager_test extends \advanced_testcase {
         $tasks = \core\task\manager::get_adhoc_tasks(synchronise_meeting::class);
         $this->assertCount(1, $tasks);
         $this->assertSame((int) $owner->id, (int) reset($tasks)->get_userid());
+
+        $diagnostics = array_values($DB->get_records(
+            'googlemeet_diagnostics',
+            ['googlemeetid' => $meeting->id, 'operation' => diagnostic_recorder::OPERATION_MEETING_CANCEL],
+            'id ASC'
+        ));
+        $this->assertSame(
+            [
+                diagnostic_recorder::OUTCOME_QUEUED,
+                diagnostic_recorder::OUTCOME_STARTED,
+                diagnostic_recorder::OUTCOME_SUCCEEDED,
+            ],
+            array_column($diagnostics, 'outcome')
+        );
+        $this->assertSame(
+            [
+                diagnostic_recorder::SOURCE_USER,
+                diagnostic_recorder::SOURCE_ADHOC,
+                diagnostic_recorder::SOURCE_ADHOC,
+            ],
+            array_column($diagnostics, 'source')
+        );
     }
 
     /**
@@ -215,6 +239,8 @@ final class meeting_manager_test extends \advanced_testcase {
      * A manual meeting settles locally without a remote API.
      */
     public function test_manual_meeting_becomes_ready(): void {
+        global $DB;
+
         $this->resetAfterTest();
 
         $meeting = $this->create_meeting([
@@ -231,6 +257,17 @@ final class meeting_manager_test extends \advanced_testcase {
         $this->assertSame(sync_state::READY, $updated->syncstatus);
         $this->assertSame(1, (int) $updated->syncattempts);
         $this->assertGreaterThan(0, (int) $updated->timelastattempt);
+
+        $diagnostics = array_values($DB->get_records(
+            'googlemeet_diagnostics',
+            ['googlemeetid' => $meeting->id, 'operation' => diagnostic_recorder::OPERATION_MEETING_SYNC],
+            'id ASC'
+        ));
+        $this->assertSame(
+            [diagnostic_recorder::OUTCOME_STARTED, diagnostic_recorder::OUTCOME_SUCCEEDED],
+            array_column($diagnostics, 'outcome')
+        );
+        $this->assertSame('manual_mode', $diagnostics[1]->diagnosticcode);
     }
 
     /**
@@ -328,6 +365,7 @@ final class meeting_manager_test extends \advanced_testcase {
 
         $this->assertSame(sync_state::FAILED, $updated->syncstatus);
         $this->assertSame('calendar_permission_denied', $updated->lasterrorcode);
+        $this->assertSame($meeting->calendarid, $updated->calendarid);
     }
 
     /**

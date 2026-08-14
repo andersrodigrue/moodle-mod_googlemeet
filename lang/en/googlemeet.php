@@ -27,11 +27,19 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['at'] = 'at';
 $string['issuerid'] = 'OAuth service';
-$string['issuerid_desc'] = '<a href="https://github.com/ronefel/moodle-mod_googlemeet/wiki/How-to-create-Client-ID-and-Client-Secret" target="_blank">How to set up an OAuth Service</a>';
+$string['issuerid_desc'] = 'Select the Google OAuth service used by teachers for managed Calendar meetings. The '
+    . 'flow requests event management and read-only Calendar-list scopes; existing grants must reconnect once after '
+    . 'this upgrade. <a href="https://github.com/ronefel/moodle-mod_googlemeet/wiki/'
+    . 'How-to-create-Client-ID-and-Client-Secret" target="_blank" rel="noopener">How to set up an OAuth service</a>.';
 $string['calendareventname'] = '{$a} is scheduled for';
 $string['checkweekdays'] = 'Select at least one weekday for the recurrence.';
 $string['date'] = 'Date';
+$string['deleterecordingreferences'] = 'Remove recording references';
+$string['deleterecordingreferencesconfirm'] = 'Remove every recording reference from this Moodle activity? '
+    . 'The files in Google Drive will not be deleted. A later discovery may add the references again.';
+$string['deleterecordingreferencestitle'] = 'Remove recording references?';
 $string['duration'] = 'Duration';
+$string['editrecordingname'] = 'Edit recording name';
 $string['earlierto'] = 'The event date cannot be earlier than the course start date ({$a}).';
 $string['emailcontent'] = 'Email content';
 $string['emailcontent_default'] = '<p>Hi %userfirstname%,</p>
@@ -65,6 +73,7 @@ $string['googlemeet:syncgoogledrive'] = 'Discover Google Meet recordings';
 $string['googlemeet:view'] = 'View Google Meet™ for Moodle content';
 $string['hide'] = 'Hide';
 $string['invalidactivitycontext'] = 'The requested item does not belong to this Google Meet activity.';
+$string['invalidrecordingname'] = 'Enter a recording name containing no more than 255 characters.';
 $string['invalideventenddate'] = 'The recurrence end cannot be earlier than the meeting start.';
 $string['invalideventendtime'] = 'The end time must be greater than start time';
 $string['invalidissuerid'] = 'The OAuth service selected in the "Google Meet™ for Moodle" settings is not supported by Google';
@@ -99,6 +108,12 @@ $string['jstableloading'] = 'Loading...';
 $string['jstablenorows'] = 'No recording found';
 $string['jstableperpage'] = '{select} recordings per page';
 $string['jstablesearch'] = 'Search...';
+$string['joinafterminutes'] = 'Participant access after meeting';
+$string['joinafterminutes_desc'] = 'Keep the server-side join gateway available for this long after each occurrence '
+    . 'ends. Teachers with permission to manage the meeting are not restricted by this time window.';
+$string['joinbeforeminutes'] = 'Participant early access';
+$string['joinbeforeminutes_desc'] = 'Open the server-side join gateway this long before each occurrence starts. '
+    . 'Teachers with permission to manage the meeting are not restricted by this time window.';
 $string['lastsync'] = 'Last sync:';
 $string['loading'] = 'Loading';
 $string['logintoaccount'] = 'Log in to your Google account';
@@ -108,16 +123,40 @@ $string['logout'] = 'Logout';
 $string['manage'] = 'Manage';
 $string['managedmodecannotchange'] = 'A managed meeting cannot be converted to a manual link while its remote Calendar '
     . 'lifecycle is active.';
+$string['managedcalendar'] = 'Google Calendar';
+$string['managedcalendar_help'] = 'Choose a calendar where this teacher can create events. The selection is verified '
+    . 'against the connected Google account before the activity is saved and becomes read-only after the managed '
+    . 'activity is attached, preventing an existing event from being redirected.';
+$string['managedcalendarlockedoption'] = '{$a} (attached to this managed activity)';
+$string['managedcalendarnone'] = 'No writable Google Meet-compatible calendars are available for this account.';
+$string['managedcalendaroption'] = '{$a->summary} — {$a->id}';
+$string['managedcalendarotherowner'] = 'A calendar is attached to this managed activity. Its identifier is visible '
+    . 'only to the teacher who owns the Google authorization.';
+$string['managedcalendarpreflightunavailable'] = 'Moodle could not verify writable Google calendars right now. Try '
+    . 'again before saving the managed meeting.';
+$string['managedcalendarprimary'] = '(primary)';
+$string['managedcalendarrequired'] = 'Select a writable Google Calendar before saving a managed meeting.';
+$string['managedcalendarunavailable'] = 'The selected Google Calendar is unavailable or this teacher can no longer '
+    . 'create events in it. Moodle did not switch the activity to another calendar.';
 $string['managedoauth'] = 'Google Calendar authorization';
 $string['managedoauthclose'] = 'You can close this window and return to the activity form.';
 $string['managedoauthconnect'] = 'Connect Google Calendar';
 $string['managedoauthconnected'] = 'Google Calendar is connected for this teacher.';
 $string['managedoauthfailed'] = 'Google Calendar authorization could not be completed.';
+$string['managedoauthreauthorizerequired'] = 'Reconnect Google Calendar to approve read-only access to your calendar '
+    . 'list. Event access remains limited to creating and managing events.';
+$string['managedoauthreconnect'] = 'Reconnect Google Calendar';
 $string['managedoauthrequired'] = 'Connect your Google account before saving a managed meeting.';
 $string['managedoauthunavailable'] = 'A configured Google OAuth service is required for managed meetings.';
 $string['managedowneronly'] = 'Only the teacher who owns this managed meeting can update its Google Calendar integration.';
 $string['managedroomurldesc'] = 'Managed meetings receive their Meet link after background synchronization. Enter a link '
     . 'only when using manual mode.';
+$string['meetingaccessatend'] = 'At the meeting end';
+$string['meetingaccessatstart'] = 'At the meeting start';
+$string['meetingaccessclosed'] = 'The participant access window for this meeting has closed.';
+$string['meetingaccessinvalidschedule'] = 'Moodle could not safely evaluate this meeting schedule. A teacher or '
+    . 'administrator must correct the activity before participant access can continue.';
+$string['meetingaccessscheduled'] = 'The meeting link will become available at {$a}.';
 $string['meetingend'] = 'Meeting end';
 $string['meetingend_help'] = 'Select the exact end date and time. It must be later than the meeting start.';
 $string['meetinglinknotready'] = 'The Google Meet link is not available yet. The activity will update after synchronization.';
@@ -158,6 +197,8 @@ $string['privacy:metadata:core_message'] = 'The activity uses Moodle messaging t
 $string['privacy:metadata:core_oauth2'] = 'Moodle core stores the per-user OAuth grant and tokens used by this activity.';
 $string['privacy:metadata:google_calendar'] = 'A connected teacher account sends event and conference data to Google Calendar.';
 $string['privacy:metadata:google_calendar:authorizedaccount'] = 'The Google account authorized by the teacher.';
+$string['privacy:metadata:google_calendar:calendarlist'] = 'Calendar identifiers, names, access roles and conferencing '
+    . 'support read from the connected account to select a writable destination.';
 $string['privacy:metadata:google_calendar:conference'] = 'The request to create a Google Meet conference.';
 $string['privacy:metadata:google_calendar:attendees'] = 'Email addresses of active course participants explicitly '
     . 'selected as Calendar attendees.';
@@ -325,6 +366,9 @@ $string['url_help'] = 'E.g. https://meet.google.com/aaa-aaaa-aaa';
 $string['visible'] = 'Visible';
 $string['week'] = 'Week(s)';
 $string['recordingissuerid'] = 'OAuth service for recordings';
+$string['recordingname'] = 'Recording name';
+$string['recordingplaybackunavailable'] = 'Recording playback is unavailable.';
+$string['playrecording'] = 'Play recording';
 $string['recordingissuerid_desc'] = 'Select a dedicated Google OAuth service for recording discovery. It must be '
     . 'different from the Calendar/login service and request only the Google Meet read-only scope when a teacher '
     . 'connects recordings.';
@@ -352,3 +396,38 @@ $string['recordingsyncstatusfailed'] = 'Failed';
 $string['recordingsyncstatusqueued'] = 'Queued';
 $string['recordingsyncstatusready'] = 'Ready';
 $string['recordingsyncstatussyncing'] = 'Synchronizing';
+$string['diagnosticretentiondays'] = 'Operational diagnostic retention';
+$string['diagnosticretentiondays_desc'] = 'Keep privacy-safe integration transitions for this many days. The daily '
+    . 'purge removes at most 5,000 expired rows per run.';
+$string['diagnosticsactivityid'] = 'Activity ID';
+$string['diagnosticscode'] = 'Diagnostic code';
+$string['diagnosticscount'] = 'Count';
+$string['diagnosticslatest'] = 'Latest operational transitions (up to {$a})';
+$string['diagnosticsnone'] = 'No operational transitions match these filters.';
+$string['diagnosticsoperation'] = 'Operation';
+$string['diagnosticsoperation_guest_reconcile'] = 'Calendar guest reconciliation';
+$string['diagnosticsoperation_meeting_cancel'] = 'Calendar cancellation';
+$string['diagnosticsoperation_meeting_sync'] = 'Calendar synchronization';
+$string['diagnosticsoperation_recording_discovery'] = 'Recording discovery';
+$string['diagnosticsoutcome'] = 'Outcome';
+$string['diagnosticsoutcome_blocked'] = 'Action required';
+$string['diagnosticsoutcome_failed'] = 'Failed';
+$string['diagnosticsoutcome_pending'] = 'Pending';
+$string['diagnosticsoutcome_queued'] = 'Queued';
+$string['diagnosticsoutcome_retrying'] = 'Retrying';
+$string['diagnosticsoutcome_started'] = 'Started';
+$string['diagnosticsoutcome_succeeded'] = 'Succeeded';
+$string['diagnosticspagetitle'] = 'Google Meet operational diagnostics';
+$string['diagnosticsprivacyboundary'] = 'This view never stores or displays OAuth tokens, user IDs, email addresses, '
+    . 'free-form error messages or Google response bodies. Rows are retained for {$a} days.';
+$string['diagnosticspurgeresult'] = 'Operational diagnostics retained for {$a->days} days; {$a->deleted} expired '
+    . 'row(s) were removed.';
+$string['diagnosticspurgetask'] = 'Purge Google Meet operational diagnostics';
+$string['diagnosticssource'] = 'Source';
+$string['diagnosticssource_adhoc'] = 'Owner-scoped task';
+$string['diagnosticssource_cron'] = 'Scheduled task';
+$string['diagnosticssource_user'] = 'User action';
+$string['diagnosticssummary24h'] = 'Outcomes in the last 24 hours';
+$string['diagnosticstime'] = 'Time';
+$string['eventoperationrecorded'] = 'Integration operation recorded';
+$string['googlemeet:viewdiagnostics'] = 'View Google Meet operational diagnostics';

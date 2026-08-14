@@ -104,7 +104,9 @@ final class recording_artifact {
         }
 
         $webviewlink = self::required_string($destination, 'exportUri', 2048);
-        self::validate_export_uri($webviewlink, $fileid);
+        if (!self::is_valid_playback_uri($webviewlink, $fileid)) {
+            throw new recording_response_exception('A recording has an invalid Drive playback URI.');
+        }
 
         $start = self::timestamp($response, 'startTime');
         $end = self::timestamp($response, 'endTime');
@@ -193,24 +195,31 @@ final class recording_artifact {
     }
 
     /**
-     * Validates the browser playback URL and binds it to the returned file ID.
+     * Validates a browser playback URL and binds it to its Drive file ID.
+     *
+     * This public predicate is also used when presenting historical database
+     * rows that may predate the strict API response boundary.
      *
      * @param string $uri Drive playback URI.
      * @param string $fileid Expected Drive file ID.
+     * @return bool Whether the URI is safe to expose to a browser.
      */
-    private static function validate_export_uri(string $uri, string $fileid): void {
+    public static function is_valid_playback_uri(string $uri, string $fileid): bool {
+        if (!preg_match('/^[A-Za-z0-9_-]{10,255}$/', $fileid)) {
+            return false;
+        }
+
         $parts = parse_url($uri);
-        if (
+        return !(
             !is_array($parts) ||
             ($parts['scheme'] ?? null) !== 'https' ||
             ($parts['host'] ?? null) !== 'drive.google.com' ||
             ($parts['path'] ?? null) !== '/file/d/' . $fileid . '/view' ||
             isset($parts['user']) ||
             isset($parts['pass']) ||
+            isset($parts['port']) ||
             isset($parts['fragment'])
-        ) {
-            throw new recording_response_exception('A recording has an invalid Drive playback URI.');
-        }
+        );
     }
 
     /**

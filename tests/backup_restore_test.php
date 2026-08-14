@@ -17,6 +17,7 @@
 namespace mod_googlemeet;
 
 use mod_googlemeet\local\calendar_guest_policy;
+use mod_googlemeet\local\diagnostic_recorder;
 use mod_googlemeet\local\integration_mode;
 use mod_googlemeet\local\recording_sync_state;
 use mod_googlemeet\local\sync_state;
@@ -150,6 +151,12 @@ final class backup_restore_test extends restore_date_testcase {
             'visible' => 1,
             'timemodified' => $start,
         ]);
+        (new diagnostic_recorder())->record(
+            (int) $source->id,
+            diagnostic_recorder::OPERATION_MEETING_SYNC,
+            diagnostic_recorder::OUTCOME_SUCCEEDED,
+            diagnostic_recorder::SOURCE_ADHOC
+        );
 
         $newcourseid = $this->backup_and_restore($course);
         $restored = $DB->get_record(
@@ -162,7 +169,7 @@ final class backup_restore_test extends restore_date_testcase {
         $this->assertSame(integration_mode::MANAGED, $restored->integrationmode);
         $this->assertSame(sync_state::DISCONNECTED, $restored->syncstatus);
         $this->assertSame('restored_reconnect_required', $restored->lasterrorcode);
-        $this->assertSame('primary', $restored->calendarid);
+        $this->assertNull($restored->calendarid);
         $this->assertSame('America/Sao_Paulo', $restored->timezone);
         $this->assertSame('RRULE:FREQ=WEEKLY;BYDAY=MO', $restored->recurrence);
         $this->assertSame(calendar_guest_policy::NONE, $restored->guestpolicy);
@@ -201,6 +208,12 @@ final class backup_restore_test extends restore_date_testcase {
             'googlemeetid' => $restored->id,
         ]));
         $this->assertSame(0, $DB->count_records('googlemeet_calendar_guests', [
+            'googlemeetid' => $restored->id,
+        ]));
+        $this->assertSame(1, $DB->count_records('googlemeet_diagnostics', [
+            'googlemeetid' => $source->id,
+        ]));
+        $this->assertSame(0, $DB->count_records('googlemeet_diagnostics', [
             'googlemeetid' => $restored->id,
         ]));
     }

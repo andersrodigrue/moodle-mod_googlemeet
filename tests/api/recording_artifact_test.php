@@ -78,6 +78,34 @@ final class recording_artifact_test extends \basic_testcase {
     }
 
     /**
+     * Historical playback links can be validated without constructing an artifact.
+     */
+    public function test_public_playback_uri_predicate_accepts_only_bound_drive_https(): void {
+        $fileid = 'DriveFile_12345';
+
+        $this->assertTrue(recording_artifact::is_valid_playback_uri(
+            'https://drive.google.com/file/d/DriveFile_12345/view?usp=drivesdk',
+            $fileid
+        ));
+        $this->assertFalse(recording_artifact::is_valid_playback_uri(
+            'javascript:alert(1)',
+            $fileid
+        ));
+        $this->assertFalse(recording_artifact::is_valid_playback_uri(
+            'https://drive.google.com:443/file/d/DriveFile_12345/view',
+            $fileid
+        ));
+        $this->assertFalse(recording_artifact::is_valid_playback_uri(
+            'https://drive.google.com/file/d/AnotherFile_123/view',
+            $fileid
+        ));
+        $this->assertFalse(recording_artifact::is_valid_playback_uri(
+            'https://drive.google.com/file/d/DriveFile_12345/view#fragment',
+            $fileid
+        ));
+    }
+
+    /**
      * Inverted timestamps are rejected.
      */
     public function test_rejects_invalid_time_range(): void {

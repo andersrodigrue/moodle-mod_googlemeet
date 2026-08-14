@@ -31,7 +31,13 @@ use mod_googlemeet\api\calendar_authorization_exception;
 final class oauth_manager {
 
     /** Least-privilege scope required to manage Calendar events. */
-    public const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+    public const CALENDAR_EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+
+    /** Read-only scope required to select from the owner's Calendar list. */
+    public const CALENDAR_LIST_SCOPE = 'https://www.googleapis.com/auth/calendar.calendarlist.readonly';
+
+    /** Complete least-privilege scope set used by this integration. */
+    public const CALENDAR_SCOPE = self::CALENDAR_EVENTS_SCOPE . ' ' . self::CALENDAR_LIST_SCOPE;
 
     /** Google authorization endpoint host. */
     private const GOOGLE_AUTH_HOST = 'accounts.google.com';
