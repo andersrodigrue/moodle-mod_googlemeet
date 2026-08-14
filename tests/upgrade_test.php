@@ -188,6 +188,8 @@ final class upgrade_test extends \advanced_testcase {
         global $CFG, $DB;
 
         $this->resetAfterTest();
+        $freshcolumns = $DB->get_columns('googlemeet_events');
+        $freshoccurrencekey = $freshcolumns['occurrencekey'];
         $this->run_upgrade(compatibility_contract::STABLE_VERSION);
 
         $xml = simplexml_load_file($CFG->dirroot . '/mod/googlemeet/db/install.xml');
@@ -225,8 +227,18 @@ final class upgrade_test extends \advanced_testcase {
         }
 
         $eventcolumns = $DB->get_columns('googlemeet_events');
-        $this->assertNotEmpty($eventcolumns['occurrencekey']->not_null);
-        $this->assertEmpty($eventcolumns['occurrencekey']->has_default);
+        $this->assertSame(
+            $freshoccurrencekey->not_null,
+            $eventcolumns['occurrencekey']->not_null
+        );
+        $this->assertSame(
+            $freshoccurrencekey->has_default,
+            $eventcolumns['occurrencekey']->has_default
+        );
+        $this->assertSame(
+            $freshoccurrencekey->default_value,
+            $eventcolumns['occurrencekey']->default_value
+        );
 
         $activitycolumns = $DB->get_columns('googlemeet');
         foreach (compatibility_contract::retained_activity_fields() as $field => $policy) {
