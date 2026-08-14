@@ -59,8 +59,9 @@ final class reconcile_remote_cleanups_test extends \advanced_testcase {
 
         $tasks = \core\task\manager::get_adhoc_tasks(cancel_deleted_meeting::class);
         $this->assertCount(1, $tasks);
-        $this->assertSame((int) $owner->id, (int) $tasks[0]->get_userid());
-        $this->assertSame((int) $cleanup->id, (int) $tasks[0]->get_custom_data()->cleanupid);
+        $queuedtask = reset($tasks);
+        $this->assertSame((int) $owner->id, (int) $queuedtask->get_userid());
+        $this->assertSame((int) $cleanup->id, (int) $queuedtask->get_custom_data()->cleanupid);
         $this->assertSame(get_string('reconcileremotecleanupstask', 'mod_googlemeet'), $task->get_name());
     }
 

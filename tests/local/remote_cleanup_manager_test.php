@@ -154,8 +154,9 @@ final class remote_cleanup_manager_test extends \advanced_testcase {
         $this->assertSame(1, $DB->count_records('googlemeet_remote_cleanup'));
         $tasks = \core\task\manager::get_adhoc_tasks(cancel_deleted_meeting::class);
         $this->assertCount(1, $tasks);
-        $this->assertSame((int) $owner->id, (int) $tasks[0]->get_userid());
-        $this->assertSame($firstid, (int) $tasks[0]->get_custom_data()->cleanupid);
+        $task = reset($tasks);
+        $this->assertSame((int) $owner->id, (int) $task->get_userid());
+        $this->assertSame($firstid, (int) $task->get_custom_data()->cleanupid);
     }
 
     /**
@@ -253,7 +254,7 @@ final class remote_cleanup_manager_test extends \advanced_testcase {
         $course = $this->getDataGenerator()->create_course();
         $meeting = $this->create_activity($course, $owner, 'event201');
 
-        course_delete_module((int) $meeting->cmid);
+        (new \core_courseformat\local\cmactions($course))->delete((int) $meeting->cmid);
 
         $this->assertFalse($DB->record_exists('googlemeet', ['id' => $meeting->id]));
         $cleanup = $DB->get_record('googlemeet_remote_cleanup', [
@@ -261,7 +262,8 @@ final class remote_cleanup_manager_test extends \advanced_testcase {
         ], '*', MUST_EXIST);
         $tasks = \core\task\manager::get_adhoc_tasks(cancel_deleted_meeting::class);
         $this->assertCount(1, $tasks);
-        $this->assertSame((int) $cleanup->id, (int) $tasks[0]->get_custom_data()->cleanupid);
+        $task = reset($tasks);
+        $this->assertSame((int) $cleanup->id, (int) $task->get_custom_data()->cleanupid);
     }
 
     /**

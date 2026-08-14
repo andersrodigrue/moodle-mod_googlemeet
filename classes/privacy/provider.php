@@ -243,7 +243,8 @@ class provider implements
                 'userid',
                 'SELECT DISTINCT owneruserid AS userid
                    FROM {googlemeet_remote_cleanup}
-                  WHERE owneruserid IS NOT NULL'
+                  WHERE owneruserid IS NOT NULL',
+                []
             );
             return;
         }
