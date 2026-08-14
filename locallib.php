@@ -135,14 +135,31 @@ function googlemeet_print_recordings(
  * @return mixed The url if valid or false if invalid
  */
 function googlemeet_clear_url($url) {
-    $pattern = "/meet.google.com\/[a-zA-Z0-9]{3}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{3}/";
-    preg_match($pattern, $url, $matches, PREG_OFFSET_CAPTURE);
-
-    if ($matches) {
-        return 'https://' . $matches[0][0];
+    $url = trim((string) $url);
+    if ($url === '' || strlen($url) > 2048) {
+        return null;
     }
 
-    return null;
+    $parts = parse_url($url);
+    if (
+        !is_array($parts)
+        || strtolower((string) ($parts['scheme'] ?? '')) !== 'https'
+        || strtolower((string) ($parts['host'] ?? '')) !== 'meet.google.com'
+        || isset($parts['user'])
+        || isset($parts['pass'])
+        || isset($parts['port'])
+    ) {
+        return null;
+    }
+
+    $path = (string) ($parts['path'] ?? '');
+    if (!preg_match('#^/([a-zA-Z0-9]{3}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{3})/?$#D', $path, $matches)) {
+        return null;
+    }
+
+    // Google commonly appends account-selection query parameters. Persist only
+    // the canonical conference URL so later presentation can remain fail-closed.
+    return 'https://meet.google.com/' . strtolower($matches[1]);
 }
 
 /**
