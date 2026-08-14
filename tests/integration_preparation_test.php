@@ -100,7 +100,35 @@ final class integration_preparation_calendar_list_client implements calendar_lis
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 #[CoversFunction('googlemeet_prepare_integration')]
+#[CoversFunction('googlemeet_clear_url')]
 final class integration_preparation_test extends \advanced_testcase {
+
+    /**
+     * Manual links are reduced to one canonical Google Meet origin and path.
+     */
+    public function test_manual_url_is_canonicalized(): void {
+        $this->assertSame(
+            'https://meet.google.com/abc-defg-hij',
+            \googlemeet_clear_url(' HTTPS://MEET.GOOGLE.COM/ABC-DEFG-HIJ/?authuser=0#fragment ')
+        );
+    }
+
+    /**
+     * Lookalike hosts and embedded Meet-looking text are rejected.
+     */
+    public function test_manual_url_rejects_non_google_origins(): void {
+        foreach ([
+            'https://meet.google.com.evil.example/abc-defg-hij',
+            'https://meetXgoogleYcom/abc-defg-hij',
+            'https://user@meet.google.com/abc-defg-hij',
+            'https://meet.google.com:443/abc-defg-hij',
+            'http://meet.google.com/abc-defg-hij',
+            'prefix https://meet.google.com/abc-defg-hij suffix',
+            'https://meet.google.com/abc-defg-hij/extra',
+        ] as $url) {
+            $this->assertNull(\googlemeet_clear_url($url), $url);
+        }
+    }
 
     /**
      * Manual mode clears submitted integration ownership and remote identity.
