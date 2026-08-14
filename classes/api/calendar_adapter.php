@@ -139,7 +139,11 @@ final class calendar_adapter {
             return calendar_event_result::from_response($response, $eventid, $requestid);
         }
 
-        $event = $this->event_body($meeting);
+        // Existing Calendar events use PATCH semantics: omitting an array field
+        // preserves its remote value. Include recurrence even when it is empty
+        // so changing a recurring Moodle meeting to a single meeting removes the
+        // previously stored Google Calendar series.
+        $event = $this->event_body($meeting, null, true);
         if ($guestschanged) {
             $currentevent = $this->client->get_event($calendarid, $eventid);
             $event['attendees'] = $this->reconcile_attendees(
@@ -203,9 +207,14 @@ final class calendar_adapter {
      *
      * @param \stdClass $meeting Google Meet activity record.
      * @param array<int, array{email: string}>|null $attendees Managed attendees, or null to omit the field.
+     * @param bool $includerecurrence Whether an empty recurrence must be sent to clear a remote series.
      * @return array<string, mixed>
      */
-    private function event_body(\stdClass $meeting, ?array $attendees = null): array {
+    private function event_body(
+        \stdClass $meeting,
+        ?array $attendees = null,
+        bool $includerecurrence = false
+    ): array {
         $timezone = new \DateTimeZone((string) $meeting->timezone);
         $start = (new \DateTimeImmutable('@' . (int) $meeting->timestart))
             ->setTimezone($timezone)
@@ -227,7 +236,7 @@ final class calendar_adapter {
         ];
 
         $recurrence = $this->normalise_recurrence((string) ($meeting->recurrence ?? ''));
-        if ($recurrence !== []) {
+        if ($recurrence !== [] || $includerecurrence) {
             $event['recurrence'] = $recurrence;
         }
         if ($attendees !== null) {

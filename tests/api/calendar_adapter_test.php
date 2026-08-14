@@ -312,6 +312,51 @@ final class calendar_adapter_test extends \advanced_testcase {
     }
 
     /**
+     * Converting a recurring event to a single meeting explicitly clears the remote series.
+     */
+    public function test_ready_single_meeting_clears_remote_recurrence(): void {
+        $requestid = str_repeat('f', 64);
+        $client = new calendar_adapter_test_client();
+        $client->patchresponse = $this->success_response('persistedevent1', $requestid);
+        $meeting = $this->meeting([
+            'googleeventid' => 'persistedevent1',
+            'requestid' => $requestid,
+            'conferencestatus' => calendar_event_result::SUCCESS,
+            'meetinguri' => 'https://meet.google.com/abc-defg-hij',
+            'recurrence' => null,
+        ]);
+
+        (new calendar_adapter(
+            $client,
+            new calendar_identity('https://moodle.example.test')
+        ))->synchronise($meeting);
+
+        $this->assertSame(['patch'], array_column($client->calls, 'method'));
+        $this->assertArrayHasKey('recurrence', $client->calls[0]['event']);
+        $this->assertSame([], $client->calls[0]['event']['recurrence']);
+    }
+
+    /**
+     * New single meetings omit recurrence instead of sending a meaningless empty array.
+     */
+    public function test_new_single_meeting_omits_empty_recurrence(): void {
+        $identity = new calendar_identity('https://moodle.example.test');
+        $eventid = $identity->event_id(42);
+        $requestid = $identity->request_id(42, $eventid);
+        $client = new calendar_adapter_test_client();
+        $client->insertresponse = $this->response(
+            $eventid,
+            $requestid,
+            calendar_event_result::PENDING
+        );
+
+        (new calendar_adapter($client, $identity))->synchronise($this->meeting());
+
+        $this->assertSame(['insert'], array_column($client->calls, 'method'));
+        $this->assertArrayNotHasKey('recurrence', $client->calls[0]['event']);
+    }
+
+    /**
      * Ordinary edits do not email every unchanged managed attendee again.
      */
     public function test_unchanged_course_guests_use_no_email_update_policy(): void {

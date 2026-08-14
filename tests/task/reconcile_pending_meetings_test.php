@@ -34,7 +34,7 @@ final class reconcile_pending_meetings_test extends \advanced_testcase {
     /**
      * Cron queues separate owner-scoped ad hoc work without calling Google.
      */
-    public function test_execute_queues_old_pending_and_stale_syncing_meetings(): void {
+    public function test_execute_queues_pending_and_stale_worker_operations(): void {
         global $DB;
 
         $this->resetAfterTest();
@@ -55,6 +55,22 @@ final class reconcile_pending_meetings_test extends \advanced_testcase {
             'syncstatus' => sync_state::SYNCING,
             'timelastattempt' => time() - 3600,
         ]);
+        $stalecancelling = $generator->create_instance([
+            'course' => $course->id,
+            'integrationmode' => integration_mode::MANAGED,
+            'owneruserid' => $owner->id,
+            'syncstatus' => sync_state::CANCELLING,
+            'timelastattempt' => time() - 3600,
+            'lasterrorcode' => null,
+        ]);
+        $generator->create_instance([
+            'course' => $course->id,
+            'integrationmode' => integration_mode::MANAGED,
+            'owneruserid' => $owner->id,
+            'syncstatus' => sync_state::CANCELLING,
+            'timelastattempt' => time() - 3600,
+            'lasterrorcode' => 'authorization_required',
+        ]);
         $generator->create_instance([
             'course' => $course->id,
             'integrationmode' => integration_mode::MANAGED,
@@ -65,33 +81,43 @@ final class reconcile_pending_meetings_test extends \advanced_testcase {
 
         $this->expectOutputString(
             get_string('reconcilependingresult', 'mod_googlemeet', (object) [
-                'found' => 2,
-                'queued' => 2,
+                'found' => 3,
+                'queued' => 3,
             ]) . "\n"
         );
         $task = new reconcile_pending_meetings();
         $task->execute();
 
         $tasks = \core\task\manager::get_adhoc_tasks(synchronise_meeting::class);
-        $this->assertCount(2, $tasks);
+        $this->assertCount(3, $tasks);
         $meetingids = [];
         foreach ($tasks as $queuedtask) {
             $this->assertSame((int) $owner->id, (int) $queuedtask->get_userid());
             $meetingids[] = (int) $queuedtask->get_custom_data()->googlemeetid;
         }
         $this->assertEqualsCanonicalizing(
-            [(int) $oldpending->id, (int) $stalesyncing->id],
+            [(int) $oldpending->id, (int) $stalesyncing->id, (int) $stalecancelling->id],
             $meetingids
         );
-        $diagnostics = $DB->get_records('googlemeet_diagnostics', [
+        $syncdiagnostics = $DB->get_records('googlemeet_diagnostics', [
             'operation' => \mod_googlemeet\local\diagnostic_recorder::OPERATION_MEETING_SYNC,
             'outcome' => \mod_googlemeet\local\diagnostic_recorder::OUTCOME_QUEUED,
             'source' => \mod_googlemeet\local\diagnostic_recorder::SOURCE_CRON,
         ]);
-        $this->assertCount(2, $diagnostics);
+        $this->assertCount(2, $syncdiagnostics);
         $this->assertEqualsCanonicalizing(
             ['pending_reconciliation', 'stale_syncing_recovery'],
-            array_column($diagnostics, 'diagnosticcode')
+            array_column($syncdiagnostics, 'diagnosticcode')
+        );
+        $cancellationdiagnostics = $DB->get_records('googlemeet_diagnostics', [
+            'operation' => \mod_googlemeet\local\diagnostic_recorder::OPERATION_MEETING_CANCEL,
+            'outcome' => \mod_googlemeet\local\diagnostic_recorder::OUTCOME_QUEUED,
+            'source' => \mod_googlemeet\local\diagnostic_recorder::SOURCE_CRON,
+        ]);
+        $this->assertCount(1, $cancellationdiagnostics);
+        $this->assertSame(
+            'stale_cancelling_recovery',
+            reset($cancellationdiagnostics)->diagnosticcode
         );
         $this->assertSame(get_string('reconcilependingtask', 'mod_googlemeet'), $task->get_name());
     }

@@ -96,22 +96,24 @@ final class sync_repository {
     /**
      * Returns owner-scoped meetings whose remote state should be checked again.
      *
-     * Pending conferences are polled after a short delay. A stale syncing state
-     * is also recovered if all retries of the original ad hoc task were lost.
+     * Pending conferences are polled after a short delay. Stale worker states
+     * are also recovered if all retries of the original ad hoc task were lost.
+     * Cancelling records with a persisted error are deliberately excluded: they
+     * require the explicit retry or reconnect action already exposed to owners.
      *
      * @param int $pendingbefore Latest last-attempt time accepted for pending meetings.
-     * @param int $syncingbefore Latest last-attempt time accepted for stale syncing meetings.
+     * @param int $stalebefore Latest last-attempt time accepted for stale worker operations.
      * @param int $limit Maximum number of records.
      * @return \stdClass[]
      */
     public function get_reconciliation_candidates(
         int $pendingbefore,
-        int $syncingbefore,
+        int $stalebefore,
         int $limit = 100
     ): array {
         global $DB;
 
-        if ($pendingbefore < 0 || $syncingbefore < 0) {
+        if ($pendingbefore < 0 || $stalebefore < 0) {
             throw new \coding_exception('Reconciliation timestamps cannot be negative.');
         }
         if ($limit < 1 || $limit > 500) {
@@ -131,6 +133,14 @@ final class sync_repository {
                             AND gm.timelastattempt IS NOT NULL
                             AND gm.timelastattempt <= :syncingbefore
                         )
+                        OR (
+                            gm.syncstatus = :cancelling
+                            AND gm.lasterrorcode IS NULL
+                            AND (
+                                gm.timelastattempt IS NULL
+                                OR gm.timelastattempt <= :cancellingbefore
+                            )
+                        )
                     )';
         $records = $DB->get_records_sql(
             'SELECT gm.id, gm.owneruserid, gm.syncstatus, gm.timelastattempt
@@ -144,7 +154,9 @@ final class sync_repository {
                 'pending' => sync_state::PENDING,
                 'pendingbefore' => $pendingbefore,
                 'syncing' => sync_state::SYNCING,
-                'syncingbefore' => $syncingbefore,
+                'syncingbefore' => $stalebefore,
+                'cancelling' => sync_state::CANCELLING,
+                'cancellingbefore' => $stalebefore,
             ],
             0,
             $limit

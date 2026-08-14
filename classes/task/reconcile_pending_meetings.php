@@ -21,7 +21,7 @@ use mod_googlemeet\local\sync_repository;
 use mod_googlemeet\local\sync_state;
 
 /**
- * Queues owner-scoped reconciliation for pending or stale managed meetings.
+ * Queues owner-scoped reconciliation for pending or stale managed operations.
  *
  * This scheduled task never calls Google itself. It creates per-user ad hoc
  * tasks so Moodle restores the correct owner before touching OAuth tokens.
@@ -36,7 +36,7 @@ final class reconcile_pending_meetings extends \core\task\scheduled_task {
     private const PENDING_DELAY = 5 * MINSECS;
 
     /** Recover a worker state left behind after all ad hoc retries were lost. */
-    private const STALE_SYNCING_DELAY = 30 * MINSECS;
+    private const STALE_OPERATION_DELAY = 30 * MINSECS;
 
     /** Maximum number of meetings queued by one scheduled run. */
     private const BATCH_LIMIT = 100;
@@ -57,7 +57,7 @@ final class reconcile_pending_meetings extends \core\task\scheduled_task {
         $now = \core\di::get(\core\clock::class)->time();
         $candidates = (new sync_repository())->get_reconciliation_candidates(
             $now - self::PENDING_DELAY,
-            $now - self::STALE_SYNCING_DELAY,
+            $now - self::STALE_OPERATION_DELAY,
             self::BATCH_LIMIT
         );
 
@@ -66,14 +66,19 @@ final class reconcile_pending_meetings extends \core\task\scheduled_task {
         foreach ($candidates as $meeting) {
             if (synchronise_meeting::enqueue((int) $meeting->id, (int) $meeting->owneruserid)) {
                 $queued++;
+                $iscancelling = $meeting->syncstatus === sync_state::CANCELLING;
                 $diagnostics->record(
                     (int) $meeting->id,
-                    diagnostic_recorder::OPERATION_MEETING_SYNC,
+                    $iscancelling
+                        ? diagnostic_recorder::OPERATION_MEETING_CANCEL
+                        : diagnostic_recorder::OPERATION_MEETING_SYNC,
                     diagnostic_recorder::OUTCOME_QUEUED,
                     diagnostic_recorder::SOURCE_CRON,
-                    $meeting->syncstatus === sync_state::PENDING
-                        ? 'pending_reconciliation'
-                        : 'stale_syncing_recovery'
+                    match ($meeting->syncstatus) {
+                        sync_state::PENDING => 'pending_reconciliation',
+                        sync_state::CANCELLING => 'stale_cancelling_recovery',
+                        default => 'stale_syncing_recovery',
+                    }
                 );
             }
         }

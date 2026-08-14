@@ -168,7 +168,7 @@ final class sync_repository_test extends \advanced_testcase {
     }
 
     /**
-     * Only old owner-scoped pending and syncing meetings are reconciled.
+     * Only recoverable old owner-scoped operations are reconciled.
      */
     public function test_get_reconciliation_candidates_filters_state_age_and_owner(): void {
         global $DB;
@@ -185,6 +185,30 @@ final class sync_repository_test extends \advanced_testcase {
             'owneruserid' => $owner->id,
             'syncstatus' => sync_state::SYNCING,
             'timelastattempt' => $now - 3600,
+        ]);
+        $oldcancelling = $this->create_meeting([
+            'owneruserid' => $owner->id,
+            'syncstatus' => sync_state::CANCELLING,
+            'timelastattempt' => $now - 3600,
+            'lasterrorcode' => null,
+        ]);
+        $neverattemptedcancelling = $this->create_meeting([
+            'owneruserid' => $owner->id,
+            'syncstatus' => sync_state::CANCELLING,
+            'timelastattempt' => null,
+            'lasterrorcode' => null,
+        ]);
+        $blockedcancelling = $this->create_meeting([
+            'owneruserid' => $owner->id,
+            'syncstatus' => sync_state::CANCELLING,
+            'timelastattempt' => $now - 3600,
+            'lasterrorcode' => 'authorization_required',
+        ]);
+        $recentcancelling = $this->create_meeting([
+            'owneruserid' => $owner->id,
+            'syncstatus' => sync_state::CANCELLING,
+            'timelastattempt' => $now,
+            'lasterrorcode' => null,
         ]);
         $recentpending = $this->create_meeting([
             'owneruserid' => $owner->id,
@@ -214,10 +238,17 @@ final class sync_repository_test extends \advanced_testcase {
         );
 
         $this->assertEqualsCanonicalizing(
-            [$oldpending->id, $oldsyncing->id],
+            [
+                $oldpending->id,
+                $oldsyncing->id,
+                $oldcancelling->id,
+                $neverattemptedcancelling->id,
+            ],
             array_map(static fn(\stdClass $meeting): int => (int) $meeting->id, $candidates)
         );
         $this->assertNotContains($recentpending->id, array_column($candidates, 'id'));
+        $this->assertNotContains($blockedcancelling->id, array_column($candidates, 'id'));
+        $this->assertNotContains($recentcancelling->id, array_column($candidates, 'id'));
         $this->assertNotContains($noowner->id, array_column($candidates, 'id'));
         $this->assertNotContains($deletedownermeeting->id, array_column($candidates, 'id'));
         $this->assertNotContains($ready->id, array_column($candidates, 'id'));

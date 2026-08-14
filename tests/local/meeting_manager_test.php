@@ -22,6 +22,7 @@ use mod_googlemeet\api\calendar_authorization_exception;
 use mod_googlemeet\api\calendar_client;
 use mod_googlemeet\api\calendar_event_result;
 use mod_googlemeet\api\calendar_identity;
+use mod_googlemeet\api\calendar_transport_exception;
 use mod_googlemeet\task\synchronise_meeting;
 use PHPUnit\Framework\Attributes\CoversClass;
 
@@ -218,6 +219,39 @@ final class meeting_manager_test extends \advanced_testcase {
             ],
             array_column($diagnostics, 'source')
         );
+    }
+
+    /**
+     * A transient cancellation failure retains intent without becoming a blocked cancellation.
+     */
+    public function test_transient_cancellation_failure_remains_recoverable(): void {
+        $this->resetAfterTest();
+
+        $meeting = $this->create_meeting([
+            'integrationmode' => integration_mode::MANAGED,
+            'calendarid' => 'primary',
+            'googleeventid' => 'event123',
+            'syncstatus' => sync_state::CANCELLING,
+            'lasterrorcode' => 'old_error',
+        ]);
+        $client = new meeting_manager_calendar_client();
+        $client->exception = new calendar_transport_exception('Transient Calendar failure');
+        $manager = new meeting_manager(
+            calendaradapter: new calendar_adapter($client)
+        );
+
+        try {
+            $manager->process((int) $meeting->id);
+            $this->fail('A transient cancellation failure must remain available for task retry.');
+        } catch (calendar_transport_exception $e) {
+            $this->assertSame('Transient Calendar failure', $e->getMessage());
+        }
+
+        $updated = (new sync_repository())->get((int) $meeting->id);
+        $this->assertSame(sync_state::CANCELLING, $updated->syncstatus);
+        $this->assertNull($updated->lasterrorcode);
+        $this->assertSame(['delete'], $client->operations);
+        $this->assertGreaterThan(0, (int) $updated->timelastattempt);
     }
 
     /**
