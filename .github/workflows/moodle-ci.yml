@@ -104,6 +104,17 @@ jobs:
           fi
           echo "MOODLE_PLUGIN_TARGET=$(realpath "$pluginpath")" >> "$GITHUB_ENV"
 
+      - name: Install the v2.1.1 Moodle database
+        run: |
+          set -euo pipefail
+          adminpass="$(php -r 'echo bin2hex(random_bytes(24)), "Aa1!";')"
+          php "$MOODLE_ADMIN/cli/install_database.php" \
+            --agree-license \
+            --adminpass="$adminpass" \
+            --fullname="Google Meet v2.1.1 upgrade rehearsal" \
+            --shortname="googlemeet-ci"
+          unset adminpass
+
       - name: Seed v2.1.1 records
         run: php plugin/tests/fixtures/upgrade/seed_v211.php
 
