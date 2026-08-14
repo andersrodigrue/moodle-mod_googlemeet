@@ -88,20 +88,29 @@ jobs:
         run: |
           if [[ -f "$GITHUB_WORKSPACE/moodle/public/config.php" ]]; then
             echo "MOODLE_CONFIG=$GITHUB_WORKSPACE/moodle/public/config.php" >> "$GITHUB_ENV"
-            echo "MOODLE_ADMIN=$GITHUB_WORKSPACE/moodle/public/admin" >> "$GITHUB_ENV"
             pluginpath="$GITHUB_WORKSPACE/moodle/public/mod/googlemeet"
           elif [[ -f "$GITHUB_WORKSPACE/moodle/config.php" ]]; then
             echo "MOODLE_CONFIG=$GITHUB_WORKSPACE/moodle/config.php" >> "$GITHUB_ENV"
-            echo "MOODLE_ADMIN=$GITHUB_WORKSPACE/moodle/admin" >> "$GITHUB_ENV"
             pluginpath="$GITHUB_WORKSPACE/moodle/mod/googlemeet"
           else
             echo "Moodle config.php was not found." >&2
+            exit 1
+          fi
+          if [[ -f "$GITHUB_WORKSPACE/moodle/admin/cli/install_database.php" ]] &&
+             [[ -f "$GITHUB_WORKSPACE/moodle/admin/cli/upgrade.php" ]]; then
+            adminpath="$GITHUB_WORKSPACE/moodle/admin"
+          elif [[ -f "$GITHUB_WORKSPACE/moodle/public/admin/cli/install_database.php" ]] &&
+               [[ -f "$GITHUB_WORKSPACE/moodle/public/admin/cli/upgrade.php" ]]; then
+            adminpath="$GITHUB_WORKSPACE/moodle/public/admin"
+          else
+            echo "Moodle CLI administration scripts were not found." >&2
             exit 1
           fi
           if [[ ! -e "$pluginpath" ]]; then
             echo "Installed Google Meet plugin path was not found." >&2
             exit 1
           fi
+          echo "MOODLE_ADMIN=$(realpath "$adminpath")" >> "$GITHUB_ENV"
           echo "MOODLE_PLUGIN_TARGET=$(realpath "$pluginpath")" >> "$GITHUB_ENV"
 
       - name: Install the v2.1.1 Moodle database
