@@ -671,7 +671,11 @@ final class workspace_acceptance {
         return is_array($parts)
             && ($parts['scheme'] ?? null) === 'https'
             && ($parts['host'] ?? null) === 'meet.google.com'
-            && !isset($parts['user'], $parts['pass'], $parts['port'], $parts['query'], $parts['fragment'])
+            && !isset($parts['user'])
+            && !isset($parts['pass'])
+            && !isset($parts['port'])
+            && !isset($parts['query'])
+            && !isset($parts['fragment'])
             && preg_match('#^/[a-z]{3}-[a-z]{4}-[a-z]{3}/?$#', (string) ($parts['path'] ?? '')) === 1;
     }
 

@@ -171,7 +171,7 @@ final class recording_panel_test extends \advanced_testcase {
             false,
             false,
             true,
-            0,
+            $USER->id,
             static function () use (&$called): void {
                 $called = true;
             },

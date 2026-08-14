@@ -62,7 +62,7 @@ final class compatibility_contract_test extends \advanced_testcase {
             compatibility_contract::LEGACY_IDENTITY_FIELDS
         );
 
-        $this->assertSameCanonicalizing($expected, array_keys($fields));
+        $this->assertSame($expected, array_keys($fields));
         foreach (compatibility_contract::LEGACY_SCHEDULE_FIELDS as $field) {
             $this->assertTrue(compatibility_contract::is_legacy_schedule_field($field));
             $this->assertSame('schedule', $fields[$field]['category']);

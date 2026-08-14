@@ -169,7 +169,7 @@ final class external_test extends \advanced_testcase {
         $this->create_recording($fixture['meetinga']->id, 'recording-a-2', 'Recording A2');
 
         $first = delete_recordings::execute($fixture['meetinga']->cmid);
-        $this->assertSame($fixture['meetinga']->id, $first['googlemeetid']);
+        $this->assertSame((int) $fixture['meetinga']->id, $first['googlemeetid']);
         $this->assertSame(2, $first['deletedcount']);
         $this->assertFalse($DB->record_exists(
             'googlemeet_recordings',
