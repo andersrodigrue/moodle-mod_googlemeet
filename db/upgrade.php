@@ -594,7 +594,6 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
         $guesttable->add_key('useridfk', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
         $guesttable->add_index('activityuser', XMLDB_INDEX_UNIQUE, ['googlemeetid', 'userid']);
         $guesttable->add_index('activityemail', XMLDB_INDEX_UNIQUE, ['googlemeetid', 'emailhash']);
-        $guesttable->add_index('userid', XMLDB_INDEX_NOTUNIQUE, ['userid']);
         if (!$dbman->table_exists($guesttable)) {
             $dbman->create_table($guesttable);
         }

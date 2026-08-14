@@ -112,7 +112,6 @@
       <INDEXES>
         <INDEX NAME="activityuser" UNIQUE="true" FIELDS="googlemeetid, userid"/>
         <INDEX NAME="activityemail" UNIQUE="true" FIELDS="googlemeetid, emailhash"/>
-        <INDEX NAME="userid" UNIQUE="false" FIELDS="userid"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="googlemeet_diagnostics" COMMENT="Stores bounded privacy-safe operational transitions for administrators.">
