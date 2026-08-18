@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "campaign_id": "replace-campaign",
+  "source_commit": "0000000000000000000000000000000000000000",
+  "plugin_version": 2026072623,
+  "reviews": {
+    "8.3": {
+      "GW-01": "pending",
+      "GW-02": "pending",
+      "GW-03": "pending",
+      "GW-04": "pending",
+      "GW-05": "pending",
+      "GW-06": "pending",
+      "GW-07": "pending",
+      "GW-08": "pending",
+      "GW-09": "pending",
+      "GW-10": "pending",
+      "GW-11": "pending",
+      "GW-12": "pending",
+      "GW-13": "pending",
+      "GW-14": "pending"
+    },
+    "8.4": {
+      "GW-01": "pending",
+      "GW-02": "pending",
+      "GW-03": "pending",
+      "GW-04": "pending",
+      "GW-05": "pending",
+      "GW-06": "pending",
+      "GW-07": "pending",
+      "GW-08": "pending",
+      "GW-09": "pending",
+      "GW-10": "pending",
+      "GW-11": "pending",
+      "GW-12": "pending",
+      "GW-13": "pending",
+      "GW-14": "pending"
+    }
+  }
+}

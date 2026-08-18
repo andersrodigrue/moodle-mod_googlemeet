@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="mod/googlemeet/db" VERSION="20230414" COMMENT="XMLDB file for Moodle mod_googlemeet"
+<XMLDB PATH="mod/googlemeet/db" VERSION="20260814" COMMENT="XMLDB file for Moodle mod_googlemeet"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -15,39 +15,124 @@
         <FIELD NAME="intro" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Activity description."/>
         <FIELD NAME="introformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The format of the intro field."/>
         <FIELD NAME="lastsync" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The last time this activity was synced to Google Drive."/>
-        <FIELD NAME="eventdate" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The date of the event."/>
-        <FIELD NAME="starthour" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The start hour of the event."/>
-        <FIELD NAME="startminute" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The start minute of the event."/>
-        <FIELD NAME="endhour" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The end hour of the event."/>
-        <FIELD NAME="endminute" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The end minute of the event."/>
-        <FIELD NAME="addmultiply" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Whether to add multiple events."/>
-        <FIELD NAME="days" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Days of the week."/>
-        <FIELD NAME="period" TYPE="int" LENGTH="4" NOTNULL="false" SEQUENCE="false" COMMENT="The event period."/>
-        <FIELD NAME="eventenddate" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The event end date."/>
+        <FIELD NAME="eventdate" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated date retained for old backup compatibility."/>
+        <FIELD NAME="starthour" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated start hour retained for old backup compatibility."/>
+        <FIELD NAME="startminute" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated start minute retained for old backup compatibility."/>
+        <FIELD NAME="endhour" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated end hour retained for old backup compatibility."/>
+        <FIELD NAME="endminute" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated end minute retained for old backup compatibility."/>
+        <FIELD NAME="addmultiply" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Deprecated recurrence flag retained for old backup compatibility."/>
+        <FIELD NAME="days" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Deprecated recurrence weekdays retained for old backup compatibility."/>
+        <FIELD NAME="period" TYPE="int" LENGTH="4" NOTNULL="false" SEQUENCE="false" COMMENT="Deprecated recurrence interval retained for old backup compatibility."/>
+        <FIELD NAME="eventenddate" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Deprecated recurrence end retained for old backup compatibility."/>
         <FIELD NAME="notify" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Whether to send notification to the student."/>
         <FIELD NAME="minutesbefore" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="When the notification should be send."/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the instance was last modified."/>
-        <FIELD NAME="eventid" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Google Calendar Event ID"/>
+        <FIELD NAME="eventid" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Legacy Calendar link identifier. This is not a Calendar API event ID."/>
+        <FIELD NAME="integrationmode" TYPE="char" LENGTH="16" NOTNULL="true" DEFAULT="manual" SEQUENCE="false" COMMENT="Meeting integration mode: manual, legacy or managed."/>
+        <FIELD NAME="owneruserid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Moodle user who owns the Google authorization."/>
+        <FIELD NAME="oauthissuerid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="OAuth 2 issuer selected for the integration."/>
+        <FIELD NAME="calendarid" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Google Calendar identifier."/>
+        <FIELD NAME="googleeventid" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Opaque Calendar API event identifier."/>
+        <FIELD NAME="googleeventhtmlurl" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Google Calendar event page."/>
+        <FIELD NAME="googleeventetag" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Calendar API event entity tag."/>
+        <FIELD NAME="requestid" TYPE="char" LENGTH="64" NOTNULL="false" SEQUENCE="false" COMMENT="Idempotency identifier for conference creation."/>
+        <FIELD NAME="conferenceid" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Google conference identifier."/>
+        <FIELD NAME="meetingcode" TYPE="char" LENGTH="32" NOTNULL="false" SEQUENCE="false" COMMENT="Normalized Google Meet meeting code."/>
+        <FIELD NAME="meetinguri" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="URI used to join the meeting."/>
+        <FIELD NAME="timestart" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Absolute meeting start timestamp."/>
+        <FIELD NAME="timeend" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Absolute meeting end timestamp."/>
+        <FIELD NAME="timezone" TYPE="char" LENGTH="64" NOTNULL="false" SEQUENCE="false" COMMENT="IANA timezone used for the meeting."/>
+        <FIELD NAME="recurrence" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Normalized recurrence rule."/>
+        <FIELD NAME="sendupdates" TYPE="char" LENGTH="16" NOTNULL="true" DEFAULT="none" SEQUENCE="false" COMMENT="Derived Google Calendar guest notification policy."/>
+        <FIELD NAME="guestpolicy" TYPE="char" LENGTH="16" NOTNULL="true" DEFAULT="none" SEQUENCE="false" COMMENT="Whether Moodle manages active course participants as Calendar attendees."/>
+        <FIELD NAME="guesthash" TYPE="char" LENGTH="64" NOTNULL="false" SEQUENCE="false" COMMENT="Stable hash of the last managed Calendar attendee set."/>
+        <FIELD NAME="guestcount" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Number of attendees managed during the last Calendar mutation."/>
+        <FIELD NAME="guesttimelastsync" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Timestamp of the last successful attendee mutation."/>
+        <FIELD NAME="guesttimechecked" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Timestamp of the last bounded membership check."/>
+        <FIELD NAME="syncstatus" TYPE="char" LENGTH="32" NOTNULL="true" DEFAULT="draft" SEQUENCE="false" COMMENT="Current synchronization state."/>
+        <FIELD NAME="conferencestatus" TYPE="char" LENGTH="32" NOTNULL="false" SEQUENCE="false" COMMENT="Conference creation state returned by Google."/>
+        <FIELD NAME="syncattempts" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Number of synchronization attempts."/>
+        <FIELD NAME="lasterrorcode" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Sanitized code from the last synchronization error."/>
+        <FIELD NAME="lasterrormessage" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Sanitized message from the last synchronization error."/>
+        <FIELD NAME="timelastattempt" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Timestamp of the last synchronization attempt."/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the activity was created."/>
+        <FIELD NAME="recordingowneruserid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Moodle user who owns the recording authorization."/>
+        <FIELD NAME="recordingoauthissuerid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Dedicated OAuth issuer used for recording discovery."/>
+        <FIELD NAME="recordingsyncstatus" TYPE="char" LENGTH="32" NOTNULL="true" DEFAULT="disconnected" SEQUENCE="false" COMMENT="Current recording discovery state."/>
+        <FIELD NAME="recordingsyncattempts" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Number of recording discovery attempts."/>
+        <FIELD NAME="recordinglasterrorcode" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Sanitized code from the last recording discovery error."/>
+        <FIELD NAME="recordinglasterrormessage" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Sanitized recording discovery error message."/>
+        <FIELD NAME="recordingtimelastattempt" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Timestamp of the last recording discovery attempt."/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
       </KEYS>
       <INDEXES>
         <INDEX NAME="course" UNIQUE="false" FIELDS="course"/>
+        <INDEX NAME="owneruserid" UNIQUE="false" FIELDS="owneruserid"/>
+        <INDEX NAME="syncstatus" UNIQUE="false" FIELDS="syncstatus"/>
+        <INDEX NAME="guestreconcile" UNIQUE="false" FIELDS="guestpolicy, syncstatus, guesttimechecked"/>
+        <INDEX NAME="recordingowneruserid" UNIQUE="false" FIELDS="recordingowneruserid"/>
+        <INDEX NAME="recordingsyncstatus" UNIQUE="false" FIELDS="recordingsyncstatus"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="googlemeet_events" COMMENT="Stores the googlemeet events.">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="googlemeetid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="occurrencekey" TYPE="char" LENGTH="64" NOTNULL="true" SEQUENCE="false" COMMENT="Stable key derived from the canonical occurrence start."/>
         <FIELD NAME="eventdate" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The date of the event."/>
         <FIELD NAME="duration" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="The duration of the event."/>
+        <FIELD NAME="calendareventid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Moodle Calendar event reconciled for this occurrence."/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the instance was added to the course."/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="googlemeetidfk" TYPE="foreign" FIELDS="googlemeetid" REFTABLE="googlemeet" REFFIELDS="id"/>
       </KEYS>
+      <INDEXES>
+        <INDEX NAME="activityoccurrence" UNIQUE="true" FIELDS="googlemeetid, occurrencekey"/>
+        <INDEX NAME="calendareventid" UNIQUE="false" FIELDS="calendareventid"/>
+        <INDEX NAME="eventdate" UNIQUE="false" FIELDS="eventdate"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="googlemeet_calendar_guests" COMMENT="Tracks Calendar attendees managed from active Moodle enrolments.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="googlemeetid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Moodle user represented by the managed attendee."/>
+        <FIELD NAME="emailhash" TYPE="char" LENGTH="64" NOTNULL="true" SEQUENCE="false" COMMENT="One-way normalized email hash used to preserve manual Calendar guests."/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of the last snapshot mutation."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="googlemeetidfk" TYPE="foreign" FIELDS="googlemeetid" REFTABLE="googlemeet" REFFIELDS="id"/>
+        <KEY NAME="useridfk" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="activityuser" UNIQUE="true" FIELDS="googlemeetid, userid"/>
+        <INDEX NAME="activityemail" UNIQUE="true" FIELDS="googlemeetid, emailhash"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="googlemeet_diagnostics" COMMENT="Stores bounded privacy-safe operational transitions for administrators.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="googlemeetid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="operation" TYPE="char" LENGTH="32" NOTNULL="true" SEQUENCE="false" COMMENT="Closed operation identifier."/>
+        <FIELD NAME="outcome" TYPE="char" LENGTH="16" NOTNULL="true" SEQUENCE="false" COMMENT="Closed operation outcome."/>
+        <FIELD NAME="source" TYPE="char" LENGTH="16" NOTNULL="true" SEQUENCE="false" COMMENT="Closed execution source."/>
+        <FIELD NAME="diagnosticcode" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Stable sanitized code without a free-form message."/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of the operational transition."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="googlemeetidfk" TYPE="foreign" FIELDS="googlemeetid" REFTABLE="googlemeet" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="activitytime" UNIQUE="false" FIELDS="googlemeetid, timecreated"/>
+        <INDEX NAME="operationoutcome" UNIQUE="false" FIELDS="operation, outcome"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+      </INDEXES>
     </TABLE>
     <TABLE NAME="googlemeet_recordings" COMMENT="Stores references from Google Meet recordings.">
       <FIELDS>
@@ -65,18 +150,51 @@
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="googlemeetidfk" TYPE="foreign" FIELDS="googlemeetid" REFTABLE="googlemeet" REFFIELDS="id"/>
       </KEYS>
+      <INDEXES>
+        <INDEX NAME="activityrecording" UNIQUE="true" FIELDS="googlemeetid, recordingid"/>
+      </INDEXES>
     </TABLE>
-    <TABLE NAME="googlemeet_notify_done" COMMENT="Stores references from Google Meet recordings.">
+    <TABLE NAME="googlemeet_notify_done" COMMENT="Stores receipts for meeting reminders sent to users.">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="eventid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="timesent" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of the video creation date."/>
+        <FIELD NAME="timesent" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp when the reminder was sent."/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="eventidfk" TYPE="foreign" FIELDS="eventid" REFTABLE="googlemeet_events" REFFIELDS="id"/>
       </KEYS>
+      <INDEXES>
+        <INDEX NAME="eventuser" UNIQUE="true" FIELDS="eventid, userid"/>
+        <INDEX NAME="userid" UNIQUE="false" FIELDS="userid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="googlemeet_remote_cleanup" COMMENT="Durable Calendar cancellation obligations retained after local deletion.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="cleanupkey" TYPE="char" LENGTH="64" NOTNULL="true" SEQUENCE="false" COMMENT="Idempotency key derived from the remote Calendar identity."/>
+        <FIELD NAME="owneruserid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Original owner whose OAuth authorization can cancel the event."/>
+        <FIELD NAME="oauthissuerid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="OAuth issuer originally used for the managed meeting."/>
+        <FIELD NAME="calendarid" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Google Calendar identifier retained after activity deletion."/>
+        <FIELD NAME="googleeventid" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Google Calendar event identifier to cancel idempotently."/>
+        <FIELD NAME="guestcount" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Last managed guest count used to select cancellation notifications."/>
+        <FIELD NAME="status" TYPE="char" LENGTH="16" NOTNULL="true" DEFAULT="pending" SEQUENCE="false" COMMENT="Durable cleanup lifecycle state."/>
+        <FIELD NAME="attempts" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Number of remote cancellation attempts."/>
+        <FIELD NAME="lasterrorcode" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false" COMMENT="Stable sanitized code from the last failure."/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp when the cleanup obligation was captured."/>
+        <FIELD NAME="timelastattempt" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Timestamp of the last remote cancellation attempt."/>
+        <FIELD NAME="timenextattempt" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Earliest timestamp for retrying a blocked cleanup."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="cleanupkey" UNIQUE="true" FIELDS="cleanupkey"/>
+        <INDEX NAME="ownerstatus" UNIQUE="false" FIELDS="owneruserid, status"/>
+        <INDEX NAME="due" UNIQUE="false" FIELDS="status, timenextattempt"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+      </INDEXES>
     </TABLE>
   </TABLES>
 </XMLDB>

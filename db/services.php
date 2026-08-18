@@ -24,37 +24,29 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$functions = array(
-    'mod_googlemeet_sync_recordings' => array(
-        'classname' => 'mod_googlemeet_external',
-        'methodname' => 'sync_recordings',
-        'description' => '',
-        'type' => 'write',
-        'ajax' => true,
-        'capabilities' => 'mod/googlemeet:syncgoogledrive',
-    ),
-    'mod_googlemeet_recording_edit_name' => array(
-        'classname' => 'mod_googlemeet_external',
-        'methodname' => 'recording_edit_name',
-        'description' => '',
+$functions = [
+    'mod_googlemeet_rename_recording' => [
+        'classname' => 'mod_googlemeet\external\rename_recording',
+        'methodname' => 'execute',
+        'description' => 'Rename one recording reference in an authorised Google Meet activity.',
         'type' => 'write',
         'ajax' => true,
         'capabilities' => 'mod/googlemeet:editrecording',
-    ),
-    'mod_googlemeet_showhide_recording' => array(
-        'classname' => 'mod_googlemeet_external',
-        'methodname' => 'showhide_recording',
-        'description' => '',
+    ],
+    'mod_googlemeet_set_recording_visibility' => [
+        'classname' => 'mod_googlemeet\external\set_recording_visibility',
+        'methodname' => 'execute',
+        'description' => 'Set participant visibility for one recording reference explicitly.',
         'type' => 'write',
         'ajax' => true,
         'capabilities' => 'mod/googlemeet:editrecording',
-    ),
-    'mod_googlemeet_delete_all_recordings' => array(
-        'classname' => 'mod_googlemeet_external',
-        'methodname' => 'delete_all_recordings',
-        'description' => '',
+    ],
+    'mod_googlemeet_delete_recordings' => [
+        'classname' => 'mod_googlemeet\external\delete_recordings',
+        'methodname' => 'execute',
+        'description' => 'Delete all local recording references from an authorised Google Meet activity.',
         'type' => 'write',
         'ajax' => true,
         'capabilities' => 'mod/googlemeet:removerecording',
-    ),
-);
+    ],
+];

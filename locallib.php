@@ -24,8 +24,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-use mod_googlemeet\client;
-use mod_googlemeet\helper;
+use mod_googlemeet\output\recording_panel;
 
 require_once("$CFG->dirroot/mod/googlemeet/lib.php");
 
@@ -80,193 +79,53 @@ function googlemeet_print_intro($googlemeet, $cm, $course, $ignoresettings = fal
 }
 
 /**
- * Get event data from the form.
+ * Renders recording references and owner-scoped discovery controls.
  *
- * @param stdClass $googlemeet moodleform.
- * @return array list of events
- */
-function googlemeet_construct_events_data_for_add($googlemeet) {
-    global $CFG;
-
-    $eventstarttime = $googlemeet->starthour * HOURSECS + $googlemeet->startminute * MINSECS;
-    $eventendtime = $googlemeet->endhour * HOURSECS + $googlemeet->endminute * MINSECS;
-    $eventdate = $googlemeet->eventdate + $eventstarttime;
-    $duration = $eventendtime - $eventstarttime;
-
-    $events = array();
-
-    $event = new stdClass();
-    $event->googlemeetid = $googlemeet->id;
-    $event->eventdate = $eventdate;
-    $event->duration = $duration;
-    $event->timemodified = time();
-    $events[] = $event;
-
-    if (isset($googlemeet->addmultiply)) {
-        $startdate = $eventdate + DAYSECS;
-        $enddate = $googlemeet->eventenddate + $eventendtime;
-
-        // Getting first day of week.
-        $sdate = $startdate;
-        $dayinfo = usergetdate($sdate);
-        if ($CFG->calendar_startwday === '0') { // Week start from sunday.
-            $startweek = $sdate - $dayinfo['wday'] * DAYSECS; // Call new variable.
-        } else {
-            $wday = $dayinfo['wday'] === 0 ? 7 : $dayinfo['wday'];
-            $startweek = $sdate - ($wday - 1) * DAYSECS;
-        }
-
-        $wdaydesc = [0 => 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-        while ($sdate < $enddate) {
-            if ($sdate < $startweek + WEEKSECS) {
-                $dayinfo = usergetdate($sdate);
-                if (isset($googlemeet->days) && property_exists((object)$googlemeet->days, $wdaydesc[$dayinfo['wday']])) {
-                    $event = new stdClass();
-                    $event->googlemeetid = $googlemeet->id;
-                    $event->eventdate = make_timestamp(
-                        $dayinfo['year'],
-                        $dayinfo['mon'],
-                        $dayinfo['mday'],
-                        $googlemeet->starthour,
-                        $googlemeet->startminute
-                    );
-                    $event->duration = $duration;
-                    $event->timemodified = time();
-
-                    $events[] = $event;
-                }
-                $sdate += DAYSECS;
-            } else {
-                $startweek += WEEKSECS * $googlemeet->period;
-                $sdate = $startweek;
-            }
-        }
-    }
-
-    return $events;
-}
-
-/**
- * This excludes all Google Meet events.
- * @param int $googlemeetid
+ * @param \stdClass $googlemeet Activity record.
+ * @param \stdClass $cm Course module record.
+ * @param \context_module $context Activity context.
  * @return void
  */
-function googlemeet_delete_events($googlemeetid) {
-    global $DB;
-
-    $events = $DB->get_records('googlemeet_events', ['googlemeetid' => $googlemeetid]);
-
-    foreach ($events as $event) {
-        $DB->delete_records('googlemeet_notify_done', ['eventid' => $event->id]);
-    }
-
-    $DB->delete_records('googlemeet_events', ['googlemeetid' => $googlemeetid]);
-
-    // Delete Calendar Events.
-    $DB->delete_records('event', [
-        'modulename' => 'googlemeet',
-        'instance' => $googlemeetid,
-        'eventtype' => helper::GOOGLEMEET_EVENT_START
-    ]);
-}
-
-/**
- * This creates new events given as timeopen and timeclose by $googlemeet.
- *
- * @param stdClass $googlemeet moodleform
- * @param array $events list of events
- * @return void
- */
-function googlemeet_set_events($googlemeet, $events) {
-    global $DB;
-
-    googlemeet_delete_events($events[0]->googlemeetid);
-
-    $DB->insert_records('googlemeet_events', $events);
-
-    foreach ($events as $event) {
-        helper::create_calendar_event($googlemeet, $event);
-    }
-}
-
-/**
- * This creates new events given as timeopen and timeclose by googlemeet.
- *
- * @param object $googlemeet
- * @param object $cm
- * @param object $context
- * @return void
- */
-function googlemeet_print_recordings($googlemeet, $cm, $context) {
-    global $CFG, $PAGE, $OUTPUT;
-
-    $config = get_config('googlemeet');
-
-    $client = new client();
-    if (!$client->enabled) {
-        return;
-    }
+function googlemeet_print_recordings(
+    \stdClass $googlemeet,
+    \stdClass $cm,
+    \context_module $context
+): void {
+    global $CFG, $OUTPUT, $PAGE, $USER;
 
     $params = ['googlemeetid' => $googlemeet->id];
-    $hascapability = has_capability('mod/googlemeet:editrecording', $context);
-    if (!$hascapability) {
+    $caneditrecordings = has_capability('mod/googlemeet:editrecording', $context);
+    $canremoverecordings = has_capability('mod/googlemeet:removerecording', $context);
+    $cansyncrecordings = has_capability('mod/googlemeet:syncgoogledrive', $context);
+    if (!$caneditrecordings) {
         $params['visible'] = true;
     }
 
-    $html = '<div id="googlemeet_recordings" class="googlemeet_recordings">';
-
     $recordings = googlemeet_list_recordings($params);
+    $panel = new recording_panel(
+        $googlemeet,
+        (int) $cm->id,
+        $recordings,
+        $caneditrecordings,
+        $canremoverecordings,
+        $cansyncrecordings,
+        (int) $USER->id
+    );
 
-    $html .= $OUTPUT->render_from_template('mod_googlemeet/recordingstable', [
-        'recordings' => $recordings,
-        'coursemoduleid' => $cm->id,
-        'hascapability' => $hascapability
-    ]);
+    echo $OUTPUT->render($panel);
 
-    $PAGE->requires->js(new moodle_url($CFG->wwwroot . '/mod/googlemeet/assets/js/build/jstable.min.js'));
-
-    if ($hascapability) {
-        $lastsync = get_string('never', 'googlemeet');
-        if ($googlemeet->lastsync) {
-            $lastsync = userdate($googlemeet->lastsync, get_string('timedate', 'googlemeet'));
+    if ($panel->has_recordings()) {
+        if ($panel->requires_jstable()) {
+            $PAGE->requires->js(
+                new moodle_url($CFG->wwwroot . '/mod/googlemeet/assets/js/build/jstable.min.js')
+            );
         }
-
-        $redordingname = '"' . substr($googlemeet->url, 24, 12) . '" ';
-        if ($googlemeet->originalname) {
-            $redordingname .= get_string('or', 'googlemeet') . ' "' . $googlemeet->originalname . '"';
-        }
-
-        $loginhtml = '';
-        $syncbutton = '';
-        $islogged = false;
-        $isloggedcreatoremail = $client->get_email() === $googlemeet->creatoremail;
-        if (!$client->check_login()) {
-            $loginhtml = $client->print_login_popup();
-        } else {
-            $islogged = true;
-            $loginhtml = $client->print_user_info('drive');
-
-            $url = new moodle_url($PAGE->url);
-            $url->param('sync', true);
-            $syncbutton = new single_button($url, get_string('syncwithgoogledrive', 'googlemeet'), 'post', true);
-            $syncbutton = $OUTPUT->render($syncbutton);
-        }
-
-        $html .= $OUTPUT->render_from_template('mod_googlemeet/syncbutton', [
-            'lastsync' => $lastsync,
-            'creatoremail' => $googlemeet->creatoremail,
-            'redordingname' => $redordingname,
-            'login' => $loginhtml,
-            'islogged' => $islogged,
-            'syncbutton' => $syncbutton,
-            'isloggedcreatoremail' => $isloggedcreatoremail
-        ]);
+        $PAGE->requires->js_call_amd(
+            'mod_googlemeet/recordings',
+            'init',
+            [$panel->javascript_config()]
+        );
     }
-
-    $html .= '</div>';
-
-    echo $html;
 }
 
 /**
@@ -276,14 +135,31 @@ function googlemeet_print_recordings($googlemeet, $cm, $context) {
  * @return mixed The url if valid or false if invalid
  */
 function googlemeet_clear_url($url) {
-    $pattern = "/meet.google.com\/[a-zA-Z0-9]{3}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{3}/";
-    preg_match($pattern, $url, $matches, PREG_OFFSET_CAPTURE);
-
-    if ($matches) {
-        return 'https://' . $matches[0][0];
+    $url = trim((string) $url);
+    if ($url === '' || strlen($url) > 2048) {
+        return null;
     }
 
-    return null;
+    $parts = parse_url($url);
+    if (
+        !is_array($parts)
+        || strtolower((string) ($parts['scheme'] ?? '')) !== 'https'
+        || strtolower((string) ($parts['host'] ?? '')) !== 'meet.google.com'
+        || isset($parts['user'])
+        || isset($parts['pass'])
+        || isset($parts['port'])
+    ) {
+        return null;
+    }
+
+    $path = (string) ($parts['path'] ?? '');
+    if (!preg_match('#^/([a-zA-Z0-9]{3}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{3})/?$#D', $path, $matches)) {
+        return null;
+    }
+
+    // Google commonly appends account-selection query parameters. Persist only
+    // the canonical conference URL so later presentation can remain fail-closed.
+    return 'https://meet.google.com/' . strtolower($matches[1]);
 }
 
 /**
@@ -309,29 +185,46 @@ function googlemeet_has_recording($googlemeetid) {
 function googlemeet_get_users_to_notify($eventid) {
     global $DB;
 
-    $sql = "SELECT DISTINCT
-                   u.*
-              FROM {googlemeet_events} me
-        INNER JOIN {googlemeet} m
-                ON m.id = me.googlemeetid
-        INNER JOIN {course_modules} cm
-                ON (cm.instance = m.id AND cm.visible = 1 AND cm.deletioninprogress = 0)
-        INNER JOIN {course} c
-                ON (c.id = cm.course AND c.visible = 1)
-        INNER JOIN {modules} md
-                ON (md.id = cm.module AND md.name = 'googlemeet')
-        INNER JOIN {context} ctx
-                ON ctx.instanceid = c.id
-        INNER JOIN {role_assignments} ra
-                ON (ra.contextid = ctx.id AND ra.roleid = 5)
-        INNER JOIN {user} u
-                ON u.id = ra.userid
-             WHERE me.id = {$eventid}
-               AND (SELECT count(*) = 0
-                      FROM {googlemeet_notify_done} nd
-                     WHERE nd.eventid = me.id AND nd.userid = u.id)";
+    $event = $DB->get_record('googlemeet_events', ['id' => (int) $eventid]);
+    if ($event === false) {
+        return [];
+    }
+    $meeting = $DB->get_record('googlemeet', ['id' => (int) $event->googlemeetid]);
+    if ($meeting === false) {
+        return [];
+    }
+    $cm = get_coursemodule_from_instance(
+        'googlemeet',
+        (int) $meeting->id,
+        (int) $meeting->course,
+        false,
+        IGNORE_MISSING
+    );
+    if ($cm === false) {
+        return [];
+    }
+    $context = context_module::instance((int) $cm->id);
+    $users = get_enrolled_users(
+        $context,
+        'mod/googlemeet:receivenotification',
+        0,
+        'u.*',
+        'u.id ASC',
+        0,
+        0,
+        true
+    );
+    $notified = $DB->get_fieldset_select(
+        'googlemeet_notify_done',
+        'userid',
+        'eventid = :eventid',
+        ['eventid' => (int) $eventid]
+    );
+    foreach ($notified as $userid) {
+        unset($users[(int) $userid]);
+    }
 
-    return $DB->get_records_sql($sql);
+    return $users;
 }
 
 /**
@@ -361,10 +254,16 @@ function googlemeet_get_future_events() {
                 ON (c.id = cm.course AND c.visible = 1)
         INNER JOIN {modules} md
                 ON (md.id = cm.module AND md.name = 'googlemeet')
-             WHERE {$now} BETWEEN me.eventdate - m.minutesbefore * 60 AND me.eventdate
-               AND m.notify = 1";
+             WHERE :nowafter >= me.eventdate - m.minutesbefore * 60
+               AND :nowbefore <= me.eventdate
+               AND m.notify = :notify
+          ORDER BY me.eventdate ASC, me.id ASC";
 
-    return $DB->get_records_sql($sql);
+    return $DB->get_records_sql($sql, [
+        'nowafter' => $now,
+        'nowbefore' => $now,
+        'notify' => 1,
+    ], 0, 100);
 }
 
 /**
@@ -372,7 +271,7 @@ function googlemeet_get_future_events() {
  *
  * @param object $user
  * @param object $event
- * @return void
+ * @return int|false Message ID, or false when delivery failed.
  */
 function googlemeet_send_notification($user, $event) {
     global $CFG;
@@ -400,7 +299,7 @@ function googlemeet_send_notification($user, $event) {
     $message->contexturlname = $event->googlemeetname;
     $message->courseid = $event->courseid;
 
-    message_send($message);
+    return message_send($message);
 }
 
 /**
@@ -408,16 +307,36 @@ function googlemeet_send_notification($user, $event) {
  *
  * @param int $userid
  * @param int $eventid
+ * @return int Receipt ID.
  */
 function googlemeet_notify_done($userid, $eventid) {
     global $DB;
 
-    $notifydone = new stdClass();
-    $notifydone->userid = $userid;
-    $notifydone->eventid = $eventid;
-    $notifydone->timesent = time();
+    $existing = $DB->get_field('googlemeet_notify_done', 'id', [
+        'userid' => (int) $userid,
+        'eventid' => (int) $eventid,
+    ]);
+    if ($existing !== false) {
+        return (int) $existing;
+    }
 
-    return $DB->insert_record('googlemeet_notify_done', $notifydone);
+    $notifydone = (object) [
+        'userid' => (int) $userid,
+        'eventid' => (int) $eventid,
+        'timesent' => time(),
+    ];
+
+    try {
+        return $DB->insert_record('googlemeet_notify_done', $notifydone);
+    } catch (dml_write_exception $exception) {
+        // A concurrent cron worker may have stored the same receipt first.
+        return $DB->get_field(
+            'googlemeet_notify_done',
+            'id',
+            ['userid' => (int) $userid, 'eventid' => (int) $eventid],
+            MUST_EXIST
+        );
+    }
 }
 
 /**
@@ -428,15 +347,11 @@ function googlemeet_remove_notify_done_from_old_events() {
 
     $now = time();
 
-    $sql = "SELECT id
-              FROM {googlemeet_events}
-             WHERE eventdate < {$now}";
-
-    $oldevents = $DB->get_records_sql($sql);
-
-    foreach ($oldevents as $oldevent) {
-        $DB->delete_records('googlemeet_notify_done', ['eventid' => $oldevent->id]);
-    }
+    $DB->delete_records_select(
+        'googlemeet_notify_done',
+        'eventid IN (SELECT id FROM {googlemeet_events} WHERE eventdate < :now)',
+        ['now' => $now]
+    );
 }
 
 /**
@@ -485,31 +400,28 @@ function googlemeet_get_messagehtml($user, $event) {
  * @param int $googlemeetid db record of user
  */
 function googlemeet_get_upcoming_events($googlemeetid) {
-    global $DB, $OUTPUT, $USER;
+    global $DB, $USER;
 
     $now = time() - MINSECS;
-
-    $sql = "SELECT id,eventdate,duration
-              FROM {googlemeet_events}
-             WHERE googlemeetid = {$googlemeetid}
-               AND (eventdate > {$now} OR eventdate = {$now})
-             LIMIT 5";
-
-    $events = $DB->get_records_sql($sql);
+    $events = $DB->get_records_select(
+        'googlemeet_events',
+        'googlemeetid = :googlemeetid AND eventdate >= :now',
+        [
+            'googlemeetid' => (int) $googlemeetid,
+            'now' => $now,
+        ],
+        'eventdate ASC, id ASC',
+        'id, eventdate, duration',
+        0,
+        5
+    );
     $upcomingevents = [];
 
     if ($events) {
         foreach ($events as $event) {
             $start = $event->eventdate;
-            $end = $event->eventdate + $event->duration;
-            $duration = $event->duration;
-
-            $datetime = new DateTime();
-            $datetime->setTimestamp(time());
-            $nowdate = $datetime->format('Y-m-d');
-
-            $datetime->setTimestamp($start);
-            $startdate = $datetime->format('Y-m-d');
+            $nowdate = userdate(time(), '%Y-%m-%d', $USER->timezone);
+            $startdate = userdate($start, '%Y-%m-%d', $USER->timezone);
 
             $upcomingevent = new stdClass();
             $upcomingevent->today = $nowdate === $startdate;
@@ -517,12 +429,22 @@ function googlemeet_get_upcoming_events($googlemeetid) {
             array_push($upcomingevents, $upcomingevent);
         }
 
+        $firstevent = reset($events);
+
         return [
             'hasupcomingevents' => true,
             'upcomingevents' => $upcomingevents,
-            'starttime' => userdate($start, get_string('strftimehm', 'googlemeet'), $USER->timezone),
-            'endtime' => userdate($end, get_string('strftimehm', 'googlemeet'), $USER->timezone),
-            'duration' => $duration,
+            'starttime' => userdate(
+                (int) $firstevent->eventdate,
+                get_string('strftimehm', 'googlemeet'),
+                $USER->timezone
+            ),
+            'endtime' => userdate(
+                (int) $firstevent->eventdate + (int) $firstevent->duration,
+                get_string('strftimehm', 'googlemeet'),
+                $USER->timezone
+            ),
+            'duration' => (int) $firstevent->duration,
         ];
     }
 

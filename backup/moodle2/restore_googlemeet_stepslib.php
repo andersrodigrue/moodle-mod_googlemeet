@@ -35,15 +35,11 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
      */
     protected function define_structure() {
         $paths = array();
-        $userinfo = $this->get_setting_value('userinfo');
 
         $paths[] = new restore_path_element('googlemeet', '/activity/googlemeet');
 
         $paths[] = new restore_path_element('googlemeet_event',
             '/activity/googlemeet/events/event');
-
-        $paths[] = new restore_path_element('googlemeet_recording',
-            '/activity/googlemeet/recordings/recording');
 
         return $this->prepare_activity_structure($paths);
     }
@@ -57,20 +53,124 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
     protected function process_googlemeet($data) {
         global $DB;
 
-        $data = (object)$data;
-        $oldid = $data->id;
+        $data = (object) $data;
         $data->course = $this->get_courseid();
 
         // Any changes to the list of dates that needs to be rolled should be same during course restore and course reset.
         // See MDL-9367.
-        $data->eventdate = $this->apply_date_offset($data->eventdate);
-        $data->eventenddate = $this->apply_date_offset($data->eventenddate);
-        $data->timemodified = $this->apply_date_offset($data->timemodified);
+        foreach (['eventdate', 'eventenddate', 'timestart', 'timeend'] as $datefield) {
+            if (!empty($data->{$datefield})) {
+                $data->{$datefield} = $this->apply_date_offset($data->{$datefield});
+            }
+        }
+
+        $this->normalise_schedule($data);
+        $this->normalise_integration($data);
 
         // Insert the googlemeet record.
         $newitemid = $DB->insert_record('googlemeet', $data);
         // Immediately after inserting "activity" record, call this.
         $this->apply_activity_instance($newitemid);
+    }
+
+    /**
+     * Ensures older backups acquire the canonical scheduling fields.
+     *
+     * @param stdClass $data Restored activity data.
+     */
+    private function normalise_schedule(stdClass $data): void {
+        $timezone = trim((string) ($data->timezone ?? ''));
+        if ($timezone === '') {
+            $timezone = \core_date::get_server_timezone();
+        }
+
+        if ((int) ($data->timestart ?? 0) > 0 && (int) ($data->timeend ?? 0) > (int) $data->timestart) {
+            $data->timezone = $timezone;
+            return;
+        }
+
+        if (!empty($data->days) && is_string($data->days)) {
+            $days = json_decode($data->days, true);
+            $data->days = is_array($days) ? $days : [];
+        }
+        $normalized = (new \mod_googlemeet\local\meeting_form_data())->normalize_legacy($data, $timezone);
+        $data->originalname = $normalized->originalname;
+        $data->timestart = $normalized->timestart;
+        $data->timeend = $normalized->timeend;
+        $data->timezone = $normalized->timezone;
+        $data->recurrence = $normalized->recurrence;
+        $data->sendupdates = $normalized->sendupdates;
+        if (is_array($data->days)) {
+            $data->days = json_encode($data->days);
+        }
+    }
+
+    /**
+     * Removes non-portable remote identity and restores a safe local lifecycle.
+     *
+     * OAuth ownership and Calendar identifiers are intentionally never
+     * transported. A managed copy must be explicitly claimed before it can
+     * create a distinct remote event.
+     *
+     * @param stdClass $data Restored activity data.
+     */
+    private function normalise_integration(stdClass $data): void {
+        $mode = (string) ($data->integrationmode ?? \mod_googlemeet\local\integration_mode::MANUAL);
+
+        $data->owneruserid = null;
+        $data->oauthissuerid = null;
+        $data->googleeventid = null;
+        $data->googleeventhtmlurl = null;
+        $data->googleeventetag = null;
+        $data->requestid = null;
+        $data->conferenceid = null;
+        $data->meetingcode = null;
+        $data->conferencestatus = null;
+        $data->syncattempts = 0;
+        $data->timelastattempt = null;
+        $data->recordingowneruserid = null;
+        $data->recordingoauthissuerid = null;
+        $data->recordingsyncstatus = \mod_googlemeet\local\recording_sync_state::DISCONNECTED;
+        $data->recordingsyncattempts = 0;
+        $data->recordinglasterrorcode = null;
+        $data->recordinglasterrormessage = null;
+        $data->recordingtimelastattempt = null;
+        $data->guestpolicy = \mod_googlemeet\local\calendar_guest_policy::NONE;
+        $data->guesthash = null;
+        $data->guestcount = 0;
+        $data->guesttimelastsync = null;
+        $data->guesttimechecked = null;
+        $data->sendupdates = 'none';
+        $data->lastsync = null;
+        $data->creatoremail = null;
+
+        if ($mode === \mod_googlemeet\local\integration_mode::MANAGED) {
+            $data->integrationmode = \mod_googlemeet\local\integration_mode::MANAGED;
+            $data->calendarid = null;
+            $data->url = '';
+            $data->meetinguri = null;
+            $data->syncstatus = \mod_googlemeet\local\sync_state::DISCONNECTED;
+            $data->lasterrorcode = 'restored_reconnect_required';
+            $data->lasterrormessage = get_string('syncrestoredreconnectrequired', 'mod_googlemeet');
+            return;
+        }
+
+        if ($mode === \mod_googlemeet\local\integration_mode::LEGACY) {
+            $data->integrationmode = \mod_googlemeet\local\integration_mode::LEGACY;
+            $data->calendarid = null;
+            $data->meetinguri = (string) ($data->meetinguri ?? $data->url ?? '');
+            $data->syncstatus = \mod_googlemeet\local\sync_state::DISCONNECTED;
+            $data->lasterrorcode = 'reconnect_required';
+            $data->lasterrormessage = get_string('syncreconnectrequired', 'mod_googlemeet');
+            return;
+        }
+
+        $data->integrationmode = \mod_googlemeet\local\integration_mode::MANUAL;
+        $data->calendarid = null;
+        $data->meetinguri = (string) ($data->meetinguri ?? $data->url ?? '');
+        $data->syncstatus = \mod_googlemeet\local\sync_state::READY;
+        $data->lasterrorcode = null;
+        $data->lasterrormessage = null;
     }
 
     /**
@@ -88,34 +188,22 @@ class restore_googlemeet_activity_structure_step extends restore_activity_struct
         $data->googlemeetid = $this->get_new_parentid('googlemeet');
         $data->eventdate = $this->apply_date_offset($data->eventdate);
         $data->timemodified = $this->apply_date_offset($data->timemodified);
+        $data->occurrencekey = hash('sha256', 'v1:' . (int) $data->eventdate);
+        $data->calendareventid = null;
 
         $newitemid = $DB->insert_record('googlemeet_events', $data);
         $this->set_mapping('googlemeet_event', $oldid, $newitemid);
     }
 
     /**
-     * Process a recording restore.
-     *
-     * @param object $data The data in object form
-     * @return void
-     */
-    protected function process_googlemeet_recording($data) {
-        global $DB;
-
-        $data = (object)$data;
-        $oldid = $data->id;
-
-        $data->googlemeetid = $this->get_new_parentid('googlemeet');
-        $data->timemodified = $this->apply_date_offset($data->timemodified);
-
-        $newitemid = $DB->insert_record('googlemeet_recordings', $data);
-        $this->set_mapping('googlemeet_recording', $oldid, $newitemid);
-    }
-
-    /**
      * Defines post-execution actions.
      */
     protected function after_execute() {
+        global $DB;
+
         $this->add_related_files('mod_googlemeet', 'intro', null);
+        $googlemeetid = (int) $this->get_new_parentid('googlemeet');
+        $meeting = $DB->get_record('googlemeet', ['id' => $googlemeetid], '*', MUST_EXIST);
+        (new \mod_googlemeet\local\schedule_manager())->synchronise($meeting);
     }
 }

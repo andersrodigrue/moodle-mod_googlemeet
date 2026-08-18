@@ -1,0 +1,88 @@
+{{!
+    @template mod_googlemeet/sync_status
+
+    Boost-compatible state summary for the managed Calendar lifecycle.
+}}
+<div
+    class="card googlemeet-sync-status mb-3"
+    data-region="googlemeet-sync-status"
+    data-state="{{state}}"
+    aria-labelledby="googlemeet-sync-status-heading"
+>
+    <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <h3 id="googlemeet-sync-status-heading" class="h5 mb-0">
+                {{#str}} synchronizationstatus, mod_googlemeet {{/str}}
+            </h3>
+            <span class="badge {{badgeclass}}">{{label}}</span>
+            {{#inprogress}}
+                <span class="spinner-border spinner-border-sm" role="status">
+                    <span class="visually-hidden">{{#str}} loading, mod_googlemeet {{/str}}</span>
+                </span>
+            {{/inprogress}}
+        </div>
+        <p class="mb-0 mt-2">{{message}}</p>
+        {{#lastattempttext}}
+            <p class="small text-muted mb-0 mt-2">
+                {{lastattempttext}}
+            </p>
+        {{/lastattempttext}}
+        {{#haserror}}
+            <details class="mt-2">
+                <summary>{{#str}} syncdiagnosticdetails, mod_googlemeet {{/str}}</summary>
+                <dl class="row mb-0 mt-2">
+                    <dt class="col-sm-3">{{#str}} syncerrorcode, mod_googlemeet {{/str}}</dt>
+                    <dd class="col-sm-9"><code>{{errorcode}}</code></dd>
+                    {{#errormessage}}
+                        <dt class="col-sm-3">{{#str}} syncerrormessage, mod_googlemeet {{/str}}</dt>
+                        <dd class="col-sm-9">{{errormessage}}</dd>
+                    {{/errormessage}}
+                </dl>
+            </details>
+        {{/haserror}}
+        {{#hasactions}}
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                {{#canretry}}
+                    <form method="post" action="{{actionurl}}">
+                        <input type="hidden" name="id" value="{{cmid}}">
+                        <input type="hidden" name="action" value="retry">
+                        <input type="hidden" name="sesskey" value="{{sesskey}}">
+                        <button type="submit" class="btn btn-primary">
+                            {{#str}} syncretry, mod_googlemeet {{/str}}
+                        </button>
+                    </form>
+                {{/canretry}}
+                {{#canreconnect}}
+                    <form method="post" action="{{actionurl}}" target="_blank" rel="noopener">
+                        <input type="hidden" name="id" value="{{cmid}}">
+                        <input type="hidden" name="action" value="reconnect">
+                        <input type="hidden" name="sesskey" value="{{sesskey}}">
+                        <button type="submit" class="btn btn-primary">
+                            {{#str}} syncreconnect, mod_googlemeet {{/str}}
+                        </button>
+                    </form>
+                {{/canreconnect}}
+                {{#cancancel}}
+                    <form method="post" action="{{actionurl}}">
+                        <input type="hidden" name="id" value="{{cmid}}">
+                        <input type="hidden" name="action" value="cancel">
+                        <input type="hidden" name="sesskey" value="{{sesskey}}">
+                        <button type="submit" class="btn btn-outline-danger">
+                            {{#str}} synccancel, mod_googlemeet {{/str}}
+                        </button>
+                    </form>
+                {{/cancancel}}
+                {{#candisconnect}}
+                    <form method="post" action="{{actionurl}}">
+                        <input type="hidden" name="id" value="{{cmid}}">
+                        <input type="hidden" name="action" value="disconnect">
+                        <input type="hidden" name="sesskey" value="{{sesskey}}">
+                        <button type="submit" class="btn btn-outline-secondary">
+                            {{#str}} syncdisconnect, mod_googlemeet {{/str}}
+                        </button>
+                    </form>
+                {{/candisconnect}}
+            </div>
+        {{/hasactions}}
+    </div>
+</div>

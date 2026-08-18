@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "result": "passed",
+  "generated_at": "2026-07-30T12:00:00Z",
+  "source_commit": "0000000000000000000000000000000000000000",
+  "plugin_version": 2026072623,
+  "moodle_version": 2026042000,
+  "moodle_branch": "502",
+  "php_runtime": "8.3",
+  "site_profile": "php83",
+  "checks": {
+    "cli_runtime": "passed",
+    "acceptance_switch": "passed",
+    "config_profile": "passed",
+    "database_profile": "passed",
+    "outbound_mail_disabled": "passed",
+    "https_site": "passed",
+    "moodle_52": "passed",
+    "source_installed": "passed",
+    "calendar_issuer": "passed",
+    "recording_issuer": "passed",
+    "issuer_separation": "passed",
+    "single_fixture": "passed",
+    "recurring_fixture": "passed",
+    "guest_fixture": "passed",
+    "recording_fixture": "passed"
+  },
+  "failure_code": null
+}

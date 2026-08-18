@@ -1,0 +1,329 @@
+name: Google Workspace acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      campaign_id:
+        description: Shared campaign slug, for example rc1-202607
+        required: true
+        type: string
+      case_id:
+        description: Runbook case covered by this execution
+        required: true
+        type: choice
+        options:
+          - GW-01
+          - GW-02
+          - GW-03
+          - GW-04
+          - GW-05
+          - GW-06
+          - GW-07
+          - GW-08
+          - GW-09
+          - GW-10
+          - GW-11
+          - GW-12
+          - GW-13
+          - GW-14
+      php_runtime:
+        description: Dedicated tenant runtime
+        required: true
+        type: choice
+        options:
+          - '8.3'
+          - '8.4'
+      scenario:
+        description: Bounded acceptance scenario
+        required: true
+        type: choice
+        options:
+          - snapshot
+          - preflight
+          - synchronise
+          - poll
+          - cancel
+          - recordings
+      meeting_id:
+        description: Dedicated [ACCEPTANCE] activity instance ID
+        required: true
+        type: string
+      expected_schedule:
+        description: Required schedule shape
+        required: true
+        default: any
+        type: choice
+        options:
+          - any
+          - single
+          - recurring
+      expected_guests:
+        description: Exact guest count, or -1 to skip
+        required: true
+        default: '-1'
+        type: string
+      expected_recordings:
+        description: Minimum recording count, or -1 to skip
+        required: true
+        default: '-1'
+        type: string
+      timeout_seconds:
+        description: Pending conference polling limit
+        required: true
+        default: '180'
+        type: choice
+        options:
+          - '30'
+          - '60'
+          - '120'
+          - '180'
+          - '300'
+      confirm_remote_mutation:
+        description: Confirm create/update/cancel on the dedicated Google tenant
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: google-workspace-acceptance
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    name: PHP ${{ inputs.php_runtime }} / ${{ inputs.case_id }} / ${{ inputs.scenario }}
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      github.ref_protected == true
+    runs-on:
+      - self-hosted
+      - linux
+      - google-workspace-acceptance
+      - php-${{ inputs.php_runtime }}
+    environment: google-workspace-acceptance
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the protected default branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: plugin
+
+      - name: Validate bounded inputs and dedicated runner
+        env:
+          INPUT_CAMPAIGN_ID: ${{ inputs.campaign_id }}
+          INPUT_CASE_ID: ${{ inputs.case_id }}
+          INPUT_PHP_RUNTIME: ${{ inputs.php_runtime }}
+          INPUT_SCENARIO: ${{ inputs.scenario }}
+          INPUT_MEETING_ID: ${{ inputs.meeting_id }}
+          INPUT_EXPECTED_SCHEDULE: ${{ inputs.expected_schedule }}
+          INPUT_EXPECTED_GUESTS: ${{ inputs.expected_guests }}
+          INPUT_EXPECTED_RECORDINGS: ${{ inputs.expected_recordings }}
+          INPUT_TIMEOUT: ${{ inputs.timeout_seconds }}
+          INPUT_CONFIRM_MUTATION: ${{ inputs.confirm_remote_mutation }}
+          ACCEPTANCE_MOODLE_CONFIG: ${{ vars.MOODLE_CONFIG }}
+        run: |
+          set -euo pipefail
+          [[ "$INPUT_CAMPAIGN_ID" =~ ^[a-z0-9][a-z0-9-]{2,31}$ ]]
+          [[ "$INPUT_CAMPAIGN_ID" != *--* ]]
+          [[ ! "$INPUT_CAMPAIGN_ID" =~ (credential|oauth|secret|token) ]]
+          [[ "$INPUT_CASE_ID" =~ ^GW-(0[1-9]|1[0-4])$ ]]
+          [[ "$INPUT_PHP_RUNTIME" =~ ^8\.(3|4)$ ]]
+          [[ "$INPUT_SCENARIO" =~ ^(snapshot|preflight|synchronise|poll|cancel|recordings)$ ]]
+          [[ "$INPUT_MEETING_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$INPUT_EXPECTED_SCHEDULE" =~ ^(any|single|recurring)$ ]]
+          [[ "$INPUT_EXPECTED_GUESTS" =~ ^(-1|[0-9]{1,3})$ ]]
+          [[ "$INPUT_EXPECTED_RECORDINGS" =~ ^(-1|[0-9]{1,5})$ ]]
+          [[ "$INPUT_TIMEOUT" =~ ^(30|60|120|180|300)$ ]]
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+
+          checkedout="$(git -C plugin rev-parse HEAD)"
+          if [[ "$checkedout" != "$GITHUB_SHA" ]]; then
+            echo "The checked-out source does not match the dispatched commit." >&2
+            exit 1
+          fi
+
+          case "$INPUT_CASE_ID:$INPUT_SCENARIO" in
+            GW-01:preflight|GW-02:preflight|GW-03:preflight|\
+            GW-04:synchronise|GW-04:poll|GW-05:synchronise|\
+            GW-06:synchronise|GW-07:synchronise|GW-07:poll|\
+            GW-08:synchronise|GW-09:cancel|GW-09:snapshot|\
+            GW-10:synchronise|GW-11:recordings|GW-12:recordings|\
+            GW-13:preflight|GW-13:recordings|GW-14:snapshot)
+              ;;
+            *)
+              echo "The selected scenario does not belong to the runbook case." >&2
+              exit 1
+              ;;
+          esac
+
+          php_runtime="$(php -r 'echo PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION;')"
+          if [[ "$php_runtime" != "$INPUT_PHP_RUNTIME" ]]; then
+            echo "The runner PHP runtime does not match the selected campaign runtime." >&2
+            exit 1
+          fi
+
+          if [[ "$INPUT_EXPECTED_GUESTS" != "-1" ]] &&
+             (( INPUT_EXPECTED_GUESTS > 200 )); then
+            echo "The expected guest count exceeds the hard safety limit." >&2
+            exit 1
+          fi
+          if [[ "$INPUT_EXPECTED_RECORDINGS" != "-1" ]] &&
+             (( INPUT_EXPECTED_RECORDINGS > 10000 )); then
+            echo "The expected recording count is outside the bounded input." >&2
+            exit 1
+          fi
+          if [[ "$INPUT_SCENARIO" =~ ^(synchronise|cancel)$ ]] &&
+             [[ "$INPUT_CONFIRM_MUTATION" != "true" ]]; then
+            echo "Remote Calendar mutations require explicit confirmation." >&2
+            exit 1
+          fi
+          if [[ -z "$ACCEPTANCE_MOODLE_CONFIG" ]]; then
+            echo "The protected environment does not define MOODLE_CONFIG." >&2
+            exit 1
+          fi
+
+          configpath="$(realpath -- "$ACCEPTANCE_MOODLE_CONFIG")"
+          if [[ ! -f "$configpath" ]] || [[ "$(basename -- "$configpath")" != "config.php" ]]; then
+            echo "The protected environment MOODLE_CONFIG is invalid." >&2
+            exit 1
+          fi
+          if [[ "$configpath" == *$'\n'* ]] ||
+             [[ "$configpath" == *$'\r'* ]]; then
+            echo "The protected environment MOODLE_CONFIG contains control characters." >&2
+            exit 1
+          fi
+          echo "MOODLE_CONFIG=$configpath" >> "$GITHUB_ENV"
+
+      - name: Install the exact source in the dedicated tenant
+        run: |
+          set -euo pipefail
+          runtime="$(
+            php -r '
+              define("CLI_SCRIPT", true);
+              define("NO_DEBUG_DISPLAY", true);
+              require getenv("MOODLE_CONFIG");
+              $admin = isset($CFG->admin) && is_string($CFG->admin) && $CFG->admin !== ""
+                ? $CFG->admin
+                : "admin";
+              echo json_encode([$CFG->dirroot, $admin]);
+            '
+          )"
+          moodle_root="$(php -r '$v=json_decode($argv[1], true); echo $v[0];' "$runtime")"
+          admin_name="$(php -r '$v=json_decode($argv[1], true); echo $v[1];' "$runtime")"
+          if [[ ! "$admin_name" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "The dedicated Moodle admin directory name is invalid." >&2
+            exit 1
+          fi
+          moodle_root="$(realpath -- "$moodle_root")"
+          plugin_target="$(realpath -- "$moodle_root/mod/googlemeet")"
+          admin_cli="$(realpath -- "$moodle_root/$admin_name/cli")"
+
+          if [[ ! -d "$plugin_target" ]] ||
+             [[ "$plugin_target" != "$moodle_root/mod/googlemeet" ]] ||
+             [[ "$(basename -- "$plugin_target")" != "googlemeet" ]] ||
+             [[ ! -f "$plugin_target/version.php" ]] ||
+             [[ ! -x "$(command -v rsync)" ]]; then
+            echo "The dedicated Moodle plugin target is invalid." >&2
+            exit 1
+          fi
+          if [[ ! -f "$admin_cli/maintenance.php" ]] ||
+             [[ ! -f "$admin_cli/upgrade.php" ]]; then
+            echo "The Moodle maintenance CLI was not found." >&2
+            exit 1
+          fi
+
+          php "$admin_cli/maintenance.php" --enable
+          cleanup() {
+            php "$admin_cli/maintenance.php" --disable
+          }
+          trap cleanup EXIT
+
+          rsync -a --delete --exclude='.git' plugin/ "$plugin_target/"
+          php "$admin_cli/upgrade.php" --non-interactive --allow-unstable
+
+      - name: Enforce disposable environment readiness
+        env:
+          EXPECTED_RUNTIME: ${{ inputs.php_runtime }}
+        run: |
+          set -euo pipefail
+          readinessfile="$(mktemp "$RUNNER_TEMP/googlemeet-readiness.XXXXXX.json")"
+          cleanup() {
+            rm -f -- "$readinessfile"
+          }
+          trap cleanup EXIT
+
+          set +e
+          php plugin/tests/fixtures/acceptance/check_environment.php \
+            --runtime="$EXPECTED_RUNTIME" \
+            > "$readinessfile"
+          readinessstatus=$?
+          set -e
+
+          php plugin/tests/fixtures/acceptance/validate_environment.php \
+            "$readinessfile"
+          if (( readinessstatus != 0 )); then
+            echo "The disposable environment did not pass the protected readiness gate." >&2
+            exit "$readinessstatus"
+          fi
+
+      - name: Execute scenario and create closed evidence
+        id: execute
+        env:
+          INPUT_CAMPAIGN_ID: ${{ inputs.campaign_id }}
+          INPUT_CASE_ID: ${{ inputs.case_id }}
+          INPUT_PHP_RUNTIME: ${{ inputs.php_runtime }}
+          INPUT_SCENARIO: ${{ inputs.scenario }}
+          INPUT_MEETING_ID: ${{ inputs.meeting_id }}
+          INPUT_EXPECTED_SCHEDULE: ${{ inputs.expected_schedule }}
+          INPUT_EXPECTED_GUESTS: ${{ inputs.expected_guests }}
+          INPUT_EXPECTED_RECORDINGS: ${{ inputs.expected_recordings }}
+          INPUT_TIMEOUT: ${{ inputs.timeout_seconds }}
+          INPUT_CONFIRM_MUTATION: ${{ inputs.confirm_remote_mutation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          confirmation=""
+          if [[ "$INPUT_CONFIRM_MUTATION" == "true" ]]; then
+            confirmation="MUTATE-GOOGLE-WORKSPACE"
+          fi
+          evidencefile="google-workspace-${INPUT_CAMPAIGN_ID}-php${INPUT_PHP_RUNTIME}-${INPUT_CASE_ID}-${INPUT_SCENARIO}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+
+          set +e
+          php plugin/tests/fixtures/acceptance/run.php \
+            --campaign="$INPUT_CAMPAIGN_ID" \
+            --case="$INPUT_CASE_ID" \
+            --meetingid="$INPUT_MEETING_ID" \
+            --scenario="$INPUT_SCENARIO" \
+            --expected-schedule="$INPUT_EXPECTED_SCHEDULE" \
+            --expected-guests="$INPUT_EXPECTED_GUESTS" \
+            --expected-recordings="$INPUT_EXPECTED_RECORDINGS" \
+            --timeout="$INPUT_TIMEOUT" \
+            --confirm="$confirmation" \
+            > "$evidencefile"
+          acceptancestatus=$?
+          set -e
+
+          php plugin/tests/fixtures/acceptance/validate_evidence.php \
+            "$evidencefile"
+          echo "evidence_file=$evidencefile" >> "$GITHUB_OUTPUT"
+          echo "acceptance_status=$acceptancestatus" >> "$GITHUB_OUTPUT"
+
+      - name: Upload sanitized acceptance evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: google-workspace-${{ inputs.campaign_id }}-php${{ inputs.php_runtime }}-${{ inputs.case_id }}-${{ inputs.scenario }}-${{ github.run_id }}
+          path: ${{ steps.execute.outputs.evidence_file }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Apply acceptance result
+        env:
+          ACCEPTANCE_STATUS: ${{ steps.execute.outputs.acceptance_status }}
+        run: exit "$ACCEPTANCE_STATUS"

@@ -23,6 +23,8 @@
  */
 namespace mod_googlemeet\output;
 
+use mod_googlemeet\local\meeting_access_policy;
+
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
@@ -41,9 +43,13 @@ class mobile {
      * Returns the googlemeet course view for the mobile app.
      *
      * @param mixed $args
+     * @param meeting_access_policy|null $accesspolicy Explicit test dependency.
      * @return array HTML, javascript and other data.
      */
-    public static function mobile_course_view($args): array {
+    public static function mobile_course_view(
+        $args,
+        ?meeting_access_policy $accesspolicy = null
+    ): array {
         global $OUTPUT, $DB;
 
         $args = (object) $args;
@@ -62,14 +68,28 @@ class mobile {
         $course = $DB->get_record('course', array('id' => $args->courseid), '*', MUST_EXIST);
 
         $recordings = googlemeet_list_recordings(['googlemeetid' => $googlemeet->id, 'visible' => true]);
+        foreach ($recordings as $recording) {
+            $recording->playbackunavailable = get_string(
+                'recordingplaybackunavailable',
+                'mod_googlemeet'
+            );
+        }
         $hasrecordings = !empty($recordings);
+        $access = ($accesspolicy ?? new meeting_access_policy())->evaluate(
+            $googlemeet,
+            has_capability('mod/googlemeet:managemeeting', $context)
+        );
 
         $data = [
             'intro' => $googlemeet->intro,
-            'url' => $googlemeet->url,
             'cmid' => $cm->id,
+            'canjoin' => $access->can_join(),
+            'joinurl' => $access->can_join()
+                ? (new \moodle_url('/mod/googlemeet/join.php', ['id' => $cm->id]))->out(false)
+                : null,
+            'availabilitymessage' => $access->can_join() ? null : $access->message(),
             'upcomingevent' => googlemeet_get_upcoming_events($googlemeet->id),
-            'recording' => ['hasrecordings' => $hasrecordings, 'recordings' => $recordings]
+            'recording' => ['hasrecordings' => $hasrecordings, 'recordings' => $recordings],
         ];
 
         // Completion and trigger events.

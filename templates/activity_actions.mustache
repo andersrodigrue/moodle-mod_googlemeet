@@ -1,0 +1,36 @@
+{{!
+    @template mod_googlemeet/activity_actions
+
+    Safe meeting entry and Calendar details actions.
+}}
+<div
+    class="d-flex flex-wrap align-items-start gap-2 mb-3"
+    data-region="googlemeet-activity-actions"
+    data-access-state="{{accessstate}}"
+>
+    {{#canjoin}}
+        <a
+            href="{{joinurl}}"
+            class="btn btn-primary"
+            target="_blank"
+            rel="noopener"
+        >
+            {{#str}} entertheroom, mod_googlemeet {{/str}}
+        </a>
+    {{/canjoin}}
+    {{#unavailable}}
+        <div class="alert {{availabilityclass}} mb-0" role="{{availabilityrole}}">
+            {{availabilitymessage}}
+        </div>
+    {{/unavailable}}
+    {{#haseventdetails}}
+        <a
+            href="{{eventdetailsurl}}"
+            class="btn btn-outline-primary"
+            target="_blank"
+            rel="noopener"
+        >
+            {{#str}} eventdetails, mod_googlemeet {{/str}}
+        </a>
+    {{/haseventdetails}}
+</div>

@@ -38,6 +38,33 @@ $capabilities = [
         ],
     ],
 
+    'mod/googlemeet:receivenotification' => [
+        'captype' => 'read',
+        'riskbitmask' => RISK_PERSONAL,
+        'contextlevel' => CONTEXT_MODULE,
+        'archetypes' => [
+            'student' => CAP_ALLOW,
+        ],
+    ],
+
+    'mod/googlemeet:receivecalendarinvite' => [
+        'captype' => 'read',
+        'riskbitmask' => RISK_PERSONAL,
+        'contextlevel' => CONTEXT_MODULE,
+        'archetypes' => [
+            'student' => CAP_ALLOW,
+        ],
+    ],
+
+    'mod/googlemeet:viewdiagnostics' => [
+        'captype' => 'read',
+        'riskbitmask' => RISK_CONFIG,
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => [
+            'manager' => CAP_ALLOW,
+        ],
+    ],
+
     'mod/googlemeet:addinstance' => [
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
@@ -48,8 +75,20 @@ $capabilities = [
         'clonepermissionsfrom' => 'moodle/course:manageactivities'
     ],
 
+    'mod/googlemeet:managemeeting' => [
+        'captype' => 'write',
+        'riskbitmask' => RISK_CONFIG | RISK_DATALOSS,
+        'contextlevel' => CONTEXT_MODULE,
+        'archetypes' => [
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
+        'clonepermissionsfrom' => 'moodle/course:manageactivities',
+    ],
+
     'mod/googlemeet:syncgoogledrive' => [
         'captype' => 'write',
+        'riskbitmask' => RISK_PERSONAL,
         'contextlevel' => CONTEXT_MODULE,
         'archetypes' => [
             'editingteacher' => CAP_ALLOW,
@@ -68,6 +107,7 @@ $capabilities = [
 
     'mod/googlemeet:removerecording' => [
         'captype' => 'write',
+        'riskbitmask' => RISK_DATALOSS,
         'contextlevel' => CONTEXT_MODULE,
         'archetypes' => [
             'editingteacher' => CAP_ALLOW,

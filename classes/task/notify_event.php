@@ -53,18 +53,22 @@ class notify_event extends \core\task\scheduled_task {
     public function execute() {
         $events = googlemeet_get_future_events();
 
-        if ($events) {
-            foreach ($events as $event) {
-                $users = googlemeet_get_users_to_notify($event->id);
+        $sent = 0;
+        foreach ($events as $event) {
+            $users = googlemeet_get_users_to_notify($event->id);
 
-                foreach ($users as $user) {
-                    googlemeet_send_notification($user, $event);
-
+            foreach ($users as $user) {
+                if (googlemeet_send_notification($user, $event) !== false) {
                     googlemeet_notify_done($user->id, $event->id);
+                    $sent++;
                 }
             }
         }
 
         googlemeet_remove_notify_done_from_old_events();
+        mtrace(get_string('notifytaskresult', 'mod_googlemeet', (object) [
+            'events' => count($events),
+            'sent' => $sent,
+        ]));
     }
 }
