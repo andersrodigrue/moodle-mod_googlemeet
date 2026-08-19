@@ -3,7 +3,7 @@
   "result": "passed",
   "generated_at": "2026-07-30T12:00:00Z",
   "source_commit": "0000000000000000000000000000000000000000",
-  "plugin_version": 2026072623,
+  "plugin_version": 2026081900,
   "moodle_version": 2026042000,
   "moodle_branch": "502",
   "php_runtime": "8.3",

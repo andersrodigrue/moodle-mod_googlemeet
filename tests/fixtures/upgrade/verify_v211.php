@@ -277,6 +277,6 @@ $expect(
 );
 
 mtrace(
-    'Verified v2.1.1 -> 3.0.0-dev upgrade: schema, activities, occurrences, '
+    'Verified v2.1.1 -> 3.0.0-alpha.1 upgrade: schema, activities, occurrences, '
     . 'receipts and recordings are consistent.'
 );

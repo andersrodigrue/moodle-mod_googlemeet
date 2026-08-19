@@ -57,7 +57,7 @@ $write = static function (string $path, array $document) use (&$files, $fail): v
 
 $campaignid = 'campaign-selftest';
 $sourcecommit = str_repeat('a', 40);
-$pluginversion = 2026072623;
+$pluginversion = 2026081900;
 $runtimes = ['8.3', '8.4'];
 $caseids = [
     'GW-01',

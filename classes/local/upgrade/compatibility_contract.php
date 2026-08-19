@@ -37,8 +37,8 @@ final class compatibility_contract {
     /** Version immediately before the legacy eventid savepoint. */
     public const PRE_EVENTID_VERSION = 2023042199;
 
-    /** Current development schema and cache savepoint. */
-    public const CURRENT_VERSION = 2026072623;
+    /** Current alpha release schema and cache savepoint. */
+    public const CURRENT_VERSION = 2026081900;
 
     /** @var int[] Ordered savepoints supported by the current upgrade chain. */
     public const SAVEPOINTS = [
@@ -57,6 +57,7 @@ final class compatibility_contract {
         2026072620,
         2026072621,
         2026072622,
+        2026072623,
         self::CURRENT_VERSION,
     ];
 
