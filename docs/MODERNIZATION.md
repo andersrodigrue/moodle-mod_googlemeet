@@ -1,6 +1,6 @@
 # Moodle 5.2 modernization
 
-The `3.0.0-dev` line targets Moodle 5.2 with PHP 8.3 and 8.4. It preserves the
+The `3.0.0-alpha.1` line targets Moodle 5.2 with PHP 8.3 and 8.4. It preserves the
 `mod_googlemeet` component name so existing sites can upgrade in place.
 
 This development line is alpha software and is not ready for production use.
@@ -579,7 +579,7 @@ presentation boundary:
   unsafe historical links, escaped names, mutation-control visibility and
   Moodle app output without inline handlers.
 
-This is an intentional pre-release external-function break in `3.0.0-dev`.
+This is an intentional pre-release external-function break in the `3.0.0` alpha line.
 No database schema change is required, but the plugin version advances so Moodle
 refreshes the service declarations and JavaScript caches.
 

@@ -725,5 +725,11 @@ function xmldb_googlemeet_upgrade($oldversion): bool {
         upgrade_mod_savepoint(true, 2026072623, 'googlemeet');
     }
 
+    if ($oldversion < 2026081900) {
+        // Freeze the tested feature set as 3.0.0-alpha.1. This release marker
+        // intentionally changes no database structure or stored user data.
+        upgrade_mod_savepoint(true, 2026081900, 'googlemeet');
+    }
+
     return true;
 }

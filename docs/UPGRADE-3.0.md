@@ -1,7 +1,7 @@
 # Upgrade readiness: 2.1.1 to 3.0.0
 
 This report defines the supported in-place migration from the last stable tag
-preserved by the fork to the Moodle 5.2 development line.
+preserved by the fork to the Moodle 5.2 alpha line.
 
 ## Supported baseline
 
@@ -13,7 +13,7 @@ The repository history establishes the upgrade baseline:
 | Stable release string | `2.1.1` |
 | Stable Moodle version number | `2023050101` |
 | Stable Moodle requirement | Moodle 3.7 |
-| Current development release | `3.0.0-dev` |
+| Current alpha release | `3.0.0-alpha.1` |
 | Current Moodle requirement | Moodle 5.2 |
 | Current PHP matrix | PHP 8.3 and 8.4 |
 
@@ -42,6 +42,7 @@ Installations with an older version number also retain the guarded
 | `2026072621` | Add complete acceptance-campaign accounting. | No schema mutation; evidence binds each runbook case to the exact Moodle/PHP runtime and the offline gate requires both supported PHP series. |
 | `2026072622` | Add protected dual-environment readiness. | No schema mutation; read-only checks prove runtime/site isolation, mail suppression, exact source installation, OAuth issuers and dedicated fixtures before provider access. |
 | `2026072623` | Preserve remote Calendar cancellation across activity and course deletion. | Adds a durable cleanup outbox, owner-scoped ad hoc cancellation and hourly recovery of pending, blocked or abandoned work. |
+| `2026081900` | Freeze the first installable alpha testing boundary. | No schema mutation; advances the plugin version and binds upgrade and acceptance fixtures to `3.0.0-alpha.1`. |
 
 The automated upgrade suite calls the real `xmldb_googlemeet_upgrade()` function.
 It starts once from `2023050101`, once from immediately before `2023042200`, and
@@ -95,7 +96,7 @@ database DDL while keeping external integration acceptance separate.
 
 ## Retained legacy columns
 
-Physical removal is intentionally out of scope for `3.0.0-dev`. The central
+Physical removal is intentionally out of scope for `3.0.0-alpha.1`. The central
 `compatibility_contract` class is the machine-readable source for the following
 policy:
 

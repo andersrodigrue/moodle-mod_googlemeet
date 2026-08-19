@@ -50,8 +50,10 @@ Moodle 5.2.x
 
 PHP 8.3 or 8.4
 
-The `3.0.0-dev` development line is an alpha modernization and is not intended for
-production use yet.
+The `3.0.0-alpha.1` release is intended only for controlled testing and is not
+ready for production use. Start with the focused [alpha testing guide](TESTING.md);
+the protected dual-runtime Google Workspace campaign remains a later beta/stable
+release gate.
 
 ## Installation
 

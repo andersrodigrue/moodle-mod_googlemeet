@@ -2,7 +2,7 @@
   "schema": 1,
   "campaign_id": "replace-campaign",
   "source_commit": "0000000000000000000000000000000000000000",
-  "plugin_version": 2026072623,
+  "plugin_version": 2026081900,
   "reviews": {
     "8.3": {
       "GW-01": "pending",
